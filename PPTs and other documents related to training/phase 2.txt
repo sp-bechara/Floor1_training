@@ -1,0 +1,40 @@
+MCU Syllabus:
+
+Understand Clock architecture of stm32L4 controller which you have. DONE
+Types of Memory used in Microcontroller. DONE
+Memory Organization in Microcontroller.DONE
+Linker Script File in controller.DONE
+Interrupt Vector table. DONE
+Role of start-up file OR bootloader. DONE
+What is NVIC (nested vector interrupt controller). DONE
+Booting process of microcontroller. DONE
+What happens when we pressed reset button in microcontroller. DONE 
+What is optimization in controller. DONE
+What is volatile keyword in controller. DONE
+Protocol (UART, SPI, I2C, ADC, WDT, RTC) DONE
+FreeRTOS (All Basic RTOS concept) DONE
+RNG,PWM RNG-doubt
+Timer DONE
+
+question related to MCU..............
+OSCOSCILLATOR, Type, crystal osc 
+All clock diff, DONE 
+Pull-up and pull down, DONE
+Read cmd in I2C, 
+Why SPI mode required, DONE
+What if we connect Multiple slave with same address, DONE
+SPI waveform. DONE
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+Linux syllabus:
+Lib i.e. static and dynamic
+syscalls
+Networking theory
+Chat application code needs to be updated
+
+question related to Linux..............
+Process state
+Memory layout
+Where PCB store  
+Type of scheduler
+Bin semaphore and mutex diff

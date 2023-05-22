@@ -1,0 +1,77 @@
+Networking Layer:
+
+OSI Model(Open source interconnection)
+
+Two points to be remembered for OSI model:
+1) It is having 7 layers architecture, each layer having specific functionality.
+2) All this layers works collaboratively to transmit data from one network to another network across globe.
+
+Layers:
+1) Application
+2) Presentation
+3) Session
+4) Transport
+5) Network
+6) Data link
+7) Physical
+
+Application Layer:
+It enables user to network resources.
+
+services offered:
+1-File transfer and access management.
+2-Mail services
+3-Directory services
+
+Presentation layer:
+It is concerned with syntax and sematics of the info exchange between two systems.
+
+services offered:
+1-Translation
+2-Encryption
+3-Compression
+
+Session layer:
+It establishes, maintain and synchronized the interaction between two connecting devices.
+
+services offered:
+1-Dailog control i.e. half duplex or full duplex
+2-synchronization
+
+Transport layer:
+It is responsible for process to process delivery of entire message.
+
+services offered:
+1-Port addressing
+2-Segmentation and reassembly
+3-Connection control
+4-End to end flow control
+5-error control
+
+Network layer:
+It is responsible for delivery of data from source network to destination network.
+
+services offered:
+1-Logical Addressing i.e. IP addressing
+2-Routing
+
+Data link layer:
+It is responsible for moving data(frames) from one node to another node.
+
+services offered:
+1-framing
+2-Physical Addressing
+3-Flow control
+4-error control
+4-access control
+
+Physical layer:
+It is responsible for transmitting bits over a medium.It also provide electrical and mechanical specification.
+
+services offered:
+1-Physical characteristic of the media.
+2-Representation of bits.
+3-Data rate
+4-synchronization of bits
+5-line configuration
+ 

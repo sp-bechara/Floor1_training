@@ -1,0 +1,79 @@
+Day-2 modification
+
+Q-1)What if we want overwrite Flash data?
+steps:
+1--Define a pointer to the location in Flash where we want to write new data
+2--Define a buffer to hold the new data we want to write
+3--Erase the sector of Flash memory that contains the data we want to overwrite  FLASH_Erase_Sector(sector name, voltage range)
+4--Wait for the Flash memory to finish erasing  FLASH_WaitForLastOperation(timeout value in milliseconds)
+5--Write the new data to Flash memory  HAL_FLASH_Program(type of Flash memory program, address in Flash memory to write to, data to write)
+6--Wait for the Flash memory to finish writing FLASH_WaitForLastOperation(timeout value in milliseconds)
+
+
+Q-2)Access time difference in flash memory and EEPROM?
+-EEPROM memory tends to have slower access times than Flash memory.
+
+-REASON for EEPROM to be slower:  EEPROM memory is typically implemented using floating-gate transistors, which require a 
+relatively high voltage to program and erase data. This high voltage requirement can slow down the read and write operations 
+of EEPROM memory.
+
+-REASON for flash to be faster: Flash memory is typically implemented using NOR flash or NAND flash technology, 
+which can have faster access times than EEPROM memory. 
+
+-In terms of accessing the exact same data stored in both Flash and EEPROM memory, the access time of Flash memory
+is generally expected to be less than the access time of EEPROM memory.
+
+Q-3)Read and write speed operations in Flash memory and EEPROM?
+When the exact same data is to be read and written repeatedly, the speed of Flash memory is typically faster than EEPROM memory.
+
+Q-4)Static lib:
+	1 create object files to be added to static library (to create multiple object files in one command use -fpic)
+	2 ar rcs <static_library_name_with_extension(.a)> <object_file_name>
+	3 gcc -o main main.o -L. <static_library_name_with_extension(.a)>
+	4 execute the code
+	
+	Dynamic lib:
+	1 create object files to be added to static library (to create multiple object files in one command use -fpic)
+	2 gcc *.o -shared -o <dynamic_library_name_with_extension(.so)>
+	3 gcc -o main main.o -L. <dynamic_library_name_with_extension(.so)>
+	4 execute the code but it will so error
+	5 check dynamic dependences of my main using ldd main
+	6 solve the error using 2 ways.
+		1 By adding dynamic library into root folder using sudo cp <dynamic_library_name_with_extension(.so)> /usr/lib
+		2 By adding path i.e. export_LD_LIBRARY_PATH <copy paste pwd>
+	7 it will solve the problem so execute the code
+	
+	
+
+Day-3 modification
+
+
+
+Q-1) UART error in details.
+-Framing Error: This occurs when the UART receiver detects an invalid stop bit. 
+This can happen if the sender and receiver are not configured to the same baud rate or if there is noise on the transmission line.
+
+-Parity Error: This occurs when the parity bit in a received character does not match the expected parity bit. -
+Parity is an optional error-checking mechanism used in some UART implementations.
+
+-Overrun Error: This occurs when the UART receiver's buffer is full and cannot accept any more data. 
+This can happen if the sender is transmitting data faster than the receiver can process it.
+
+-Noise Error: This occurs when the received data contains noise or interference that prevents the receiver from properly 
+decoding the transmitted data.
+
+
+
+Q-2) Disadvantages of Volatile Keyword 
+-May hurt performance: The use of the "volatile" keyword can prevent the compiler from performing certain optimizations,
+which may hurt performance. In some cases, using "volatile" can cause code to run slower than it would without it.
+
+-Can make code harder to read and reason about: The use of "volatile" can make code more difficult to read and reason about,
+as it adds complexity to the code.
+
+-Does not provide thread-safety guarantees: While "volatile" can help ensure that all threads see the most up-to-date value of a variable,
+it does not provide any guarantees about thread safety. Additional synchronization mechanisms, such as mutexes or semaphores,
+may still be required to ensure correct behavior in multi-threaded environments.
+
+Q-3) Check how to overwrite data in flash.
+
