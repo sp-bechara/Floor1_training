@@ -43,19 +43,9 @@
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
-uint8_t msg1[] = "******No Interrupt******\n\n\r";
-uint8_t msg2[] = "=====>Key 0 pressed\r\n";
-uint8_t msg3[] = "=====> key 1 pressed\r\n ";
-uint8_t msg4[] = "=====>Key 2 pressed\r\n";
-uint8_t msg5[] = "=====> key 3 pressed\r\n ";
-uint8_t msg6[] = "=====>Key 4 pressed\r\n";
-uint8_t msg7[] = "=====> key 5 pressed\r\n ";
-uint8_t msg8[] = "=====>Key 6 pressed\r\n";
-uint8_t msg9[] = "=====> key 7 pressed\r\n ";
-uint8_t msg10[] = "=====>Key 8 pressed\r\n";
-uint8_t msg11[] = "=====> key 9 pressed\r\n ";
-uint8_t msg12[] = "******Invalid Input******\n\n\r";
-uint8_t receivedData;
+char receivedChar;
+void inter(int *receivedChar);
+int flag=0;
 
 /* USER CODE END PV */
 
@@ -64,7 +54,6 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_USART2_UART_Init(void);
 /* USER CODE BEGIN PFP */
-//void inter(int* receivedData);
 
 /* USER CODE END PFP */
 
@@ -103,7 +92,6 @@ int main(void)
   MX_GPIO_Init();
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
-  //HAL_UART_Receive_IT(&huart2, &receivedData, 1);
 
   /* USER CODE END 2 */
 
@@ -114,9 +102,18 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-	  HAL_UART_Receive_IT(&huart2, &receivedData, 1);
-	  HAL_UART_Transmit(&huart2, msg1, sizeof(msg1),HAL_MAX_DELAY);
-	  HAL_Delay(1000);
+//	  if (HAL_UART_Receive(&huart2, (uint8_t*)&receivedChar, 1, HAL_MAX_DELAY) == HAL_OK) {
+//	        // Echo back the received character
+//	        HAL_UART_Transmit(&huart2, (uint8_t*)&receivedChar, 1, HAL_MAX_DELAY);
+//	      }
+
+	  HAL_UART_Receive_IT(&huart2, (uint8_t*)&receivedChar, 1);
+	  if(flag!=0){
+//	  	HAL_UART_Transmit_IT(&huart2, (uint8_t*)&receivedChar, 1);
+		  HAL_UART_Transmit(&huart2, (uint8_t*)&receivedChar, 1, HAL_MAX_DELAY);
+	  	flag=0;
+	  	  }
+
   }
   /* USER CODE END 3 */
 }
@@ -238,39 +235,8 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-void inter()
-{
-	if(receivedData=='0'){
-		HAL_UART_Transmit(&huart2, msg2, sizeof(msg2),HAL_MAX_DELAY);
-	}
-	if(receivedData=='1'){
-			HAL_UART_Transmit(&huart2, msg3, sizeof(msg3),HAL_MAX_DELAY);
-		}
-	if(receivedData=='2'){
-			HAL_UART_Transmit(&huart2, msg4, sizeof(msg4),HAL_MAX_DELAY);
-		}
-	if(receivedData=='3'){
-			HAL_UART_Transmit(&huart2, msg5, sizeof(msg5),HAL_MAX_DELAY);
-		}
-	if(receivedData=='4'){
-			HAL_UART_Transmit(&huart2, msg6, sizeof(msg6),HAL_MAX_DELAY);
-		}
-	if(receivedData=='5'){
-			HAL_UART_Transmit(&huart2, msg7, sizeof(msg7),HAL_MAX_DELAY);
-		}
-	if(receivedData=='6'){
-			HAL_UART_Transmit(&huart2, msg8, sizeof(msg8),HAL_MAX_DELAY);
-		}
-	if(receivedData=='7'){
-			HAL_UART_Transmit(&huart2, msg9, sizeof(msg9),HAL_MAX_DELAY);
-		}
-	if(receivedData=='8'){
-			HAL_UART_Transmit(&huart2, msg10, sizeof(msg10),HAL_MAX_DELAY);
-		}
-	if(receivedData=='9'){
-			HAL_UART_Transmit(&huart2, msg11, sizeof(msg11),HAL_MAX_DELAY);
-		}
-	receivedData=0;
+void inter(int *receivedChar){
+	flag++;
 }
 
 /* USER CODE END 4 */

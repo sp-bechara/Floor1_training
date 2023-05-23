@@ -41,7 +41,6 @@
 
 /* Private variables ---------------------------------------------------------*/
 /* USER CODE BEGIN PV */
-uint8_t received_Data;
 
 /* USER CODE END PV */
 
@@ -209,8 +208,7 @@ void USART2_IRQHandler(void)
   /* USER CODE END USART2_IRQn 0 */
   HAL_UART_IRQHandler(&huart2);
   /* USER CODE BEGIN USART2_IRQn 1 */
-
-	  inter();
+  inter();
 
   /* USER CODE END USART2_IRQn 1 */
 }
