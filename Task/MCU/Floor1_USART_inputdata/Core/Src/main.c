@@ -43,8 +43,8 @@
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
-char receivedChar;
-void inter(int *receivedChar);
+uint8_t receivedChar;
+void ISR();
 int flag=0;
 
 /* USER CODE END PV */
@@ -92,7 +92,7 @@ int main(void)
   MX_GPIO_Init();
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
-
+  HAL_UART_Receive_IT(&huart2, &receivedChar, 1);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -102,16 +102,9 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-//	  if (HAL_UART_Receive(&huart2, (uint8_t*)&receivedChar, 1, HAL_MAX_DELAY) == HAL_OK) {
-//	        // Echo back the received character
-//	        HAL_UART_Transmit(&huart2, (uint8_t*)&receivedChar, 1, HAL_MAX_DELAY);
-//	      }
-
-	  HAL_UART_Receive_IT(&huart2, (uint8_t*)&receivedChar, 1);
 	  if(flag!=0){
-//	  	HAL_UART_Transmit_IT(&huart2, (uint8_t*)&receivedChar, 1);
-		  HAL_UART_Transmit(&huart2, (uint8_t*)&receivedChar, 1, HAL_MAX_DELAY);
-	  	flag=0;
+		  HAL_UART_Transmit(&huart2, &receivedChar, 1, HAL_MAX_DELAY);
+	  	  flag=0;
 	  	  }
 
   }
@@ -235,7 +228,8 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-void inter(int *receivedChar){
+void ISR(){
+	HAL_UART_Receive_IT(&huart2, &receivedChar, 1);
 	flag++;
 }
 
