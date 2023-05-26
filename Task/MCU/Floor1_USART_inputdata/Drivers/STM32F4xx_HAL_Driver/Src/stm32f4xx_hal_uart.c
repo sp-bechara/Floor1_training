@@ -2383,29 +2383,29 @@ void HAL_UART_IRQHandler(UART_HandleTypeDef *huart)
                                 || ((cr1its & (USART_CR1_RXNEIE | USART_CR1_PEIE)) != RESET)))
   {
     /* UART parity error interrupt occurred ----------------------------------*/
-    if (((isrflags & USART_SR_PE) != RESET) && ((cr1its & USART_CR1_PEIE) != RESET))
-    {
-      huart->ErrorCode |= HAL_UART_ERROR_PE;
-    }
-
-    /* UART noise error interrupt occurred -----------------------------------*/
-    if (((isrflags & USART_SR_NE) != RESET) && ((cr3its & USART_CR3_EIE) != RESET))
-    {
-      huart->ErrorCode |= HAL_UART_ERROR_NE;
-    }
-
-    /* UART frame error interrupt occurred -----------------------------------*/
-    if (((isrflags & USART_SR_FE) != RESET) && ((cr3its & USART_CR3_EIE) != RESET))
-    {
-      huart->ErrorCode |= HAL_UART_ERROR_FE;
-    }
-
-    /* UART Over-Run interrupt occurred --------------------------------------*/
-    if (((isrflags & USART_SR_ORE) != RESET) && (((cr1its & USART_CR1_RXNEIE) != RESET)
-                                                 || ((cr3its & USART_CR3_EIE) != RESET)))
-    {
-      huart->ErrorCode |= HAL_UART_ERROR_ORE;
-    }
+//    if (((isrflags & USART_SR_PE) != RESET) && ((cr1its & USART_CR1_PEIE) != RESET))
+//    {
+//      huart->ErrorCode |= HAL_UART_ERROR_PE;
+//    }
+//
+//    /* UART noise error interrupt occurred -----------------------------------*/
+//    if (((isrflags & USART_SR_NE) != RESET) && ((cr3its & USART_CR3_EIE) != RESET))
+//    {
+//      huart->ErrorCode |= HAL_UART_ERROR_NE;
+//    }
+//
+//    /* UART frame error interrupt occurred -----------------------------------*/
+//    if (((isrflags & USART_SR_FE) != RESET) && ((cr3its & USART_CR3_EIE) != RESET))
+//    {
+//      huart->ErrorCode |= HAL_UART_ERROR_FE;
+//    }
+//
+//    /* UART Over-Run interrupt occurred --------------------------------------*/
+//    if (((isrflags & USART_SR_ORE) != RESET) && (((cr1its & USART_CR1_RXNEIE) != RESET)
+//                                                 || ((cr3its & USART_CR3_EIE) != RESET)))
+//    {
+//      huart->ErrorCode |= HAL_UART_ERROR_ORE;
+//    }
 
     /* Call UART Error Call back function if need be --------------------------*/
     if (huart->ErrorCode != HAL_UART_ERROR_NONE)
