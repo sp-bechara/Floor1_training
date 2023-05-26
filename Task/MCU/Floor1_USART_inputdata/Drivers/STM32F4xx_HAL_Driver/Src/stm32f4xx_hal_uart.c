@@ -2373,7 +2373,6 @@ void HAL_UART_IRQHandler(UART_HandleTypeDef *huart)
     if (((isrflags & USART_SR_RXNE) != RESET) && ((cr1its & USART_CR1_RXNEIE) != RESET))
     {
       UART_Receive_IT(huart);
-      ISR();
       return;
     }
   }

@@ -18,7 +18,7 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-
+//#define ECHOBACK 1
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 
@@ -43,8 +43,9 @@
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
+#if ECHOBACK
 char RecievedData;
-
+#endif
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -91,10 +92,10 @@ int main(void)
   MX_GPIO_Init();
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
-
+#if ECHOBACK
   // Enable USART2 receive interrupt
   USART2->CR1 |= USART_CR1_RXNEIE;
-
+#endif
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -106,7 +107,6 @@ int main(void)
   }
   /* USER CODE END 3 */
 }
-
 /**
   * @brief System Clock Configuration
   * @retval None
@@ -162,8 +162,9 @@ static void MX_USART2_UART_Init(void)
 {
 
   /* USER CODE BEGIN USART2_Init 0 */
+#if ECHOBACK
 	huart2.RxXferSize = 512;
-
+#endif
   /* USER CODE END USART2_Init 0 */
 
   /* USER CODE BEGIN USART2_Init 1 */
@@ -225,6 +226,7 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+#if ECHOBACK
 void USART2_IRQHandler(void)
 {
   /* USER CODE BEGIN USART2_IRQn 0 */
@@ -235,6 +237,7 @@ void USART2_IRQHandler(void)
 	    }
   /* USER CODE END USART2_IRQn 0 */
 }
+#endif
 /* USER CODE END 4 */
 
 /**
