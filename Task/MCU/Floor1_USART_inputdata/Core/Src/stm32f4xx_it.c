@@ -201,6 +201,7 @@ void SysTick_Handler(void)
 /**
   * @brief This function handles USART2 global interrupt.
   */
+
 #ifdef ECHOBACK
 void USART2_IRQHandler(void)
 {

@@ -18,8 +18,13 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "stm32f4xx_hal_rtc.h"
+#include "stm32f4xx_hal_pwr.h"
+#include "stdio.h"
+
 
 /* USER CODE END Includes */
 
@@ -36,27 +41,79 @@
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
 //#define ECHOBACK 1
+
+#define MAX_DATE_STRING_LENGTH 11 // Maximum length for date string (including null terminator)
+#define MAX_TIME_STRING_LENGTH 9  // Maximum length for time string (including null terminator)
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+RTC_HandleTypeDef hrtc;
+
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
 #ifdef ECHOBACK
 extern char RecievedData;
 #endif
+
+char dateString[MAX_DATE_STRING_LENGTH]; // Date string buffer
+char timeString[MAX_TIME_STRING_LENGTH]; // Time string buffer
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_USART2_UART_Init(void);
+static void MX_RTC_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+void setInitialTime(void)
+{
+  RTC_TimeTypeDef sTime;
+  RTC_DateTypeDef sDate;
+
+  /* Configure the RTC time structure */
+  sTime.Hours = 12;
+  sTime.Minutes = 0;
+  sTime.Seconds = 0;
+  sTime.TimeFormat = RTC_HOURFORMAT12_AM;
+  sTime.DayLightSaving = RTC_DAYLIGHTSAVING_NONE;
+  sTime.StoreOperation = RTC_STOREOPERATION_RESET;
+  HAL_RTC_SetTime(&hrtc, &sTime, RTC_FORMAT_BIN);
+
+  /* Configure the RTC date structure */
+  sDate.WeekDay = RTC_WEEKDAY_MONDAY;
+  sDate.Month = RTC_MONTH_JANUARY;
+  sDate.Date = 1;
+  sDate.Year = 23;
+  HAL_RTC_SetDate(&hrtc, &sDate, RTC_FORMAT_BIN);
+}
+
+void getCurrentTime(void)
+{
+  RTC_TimeTypeDef sTime;
+  RTC_DateTypeDef sDate;
+
+  HAL_RTC_GetTime(&hrtc, &sTime, RTC_FORMAT_BIN);
+  HAL_RTC_GetDate(&hrtc, &sDate, RTC_FORMAT_BIN);
+
+  /* Format the time and date */
+  sprintf(timeString, "%02d:%02d:%02d\r\n", sTime.Hours, sTime.Minutes, sTime.Seconds);
+  sprintf(dateString, "%02d/%02d/%02d\r\n", sDate.Date, sDate.Month, sDate.Year);
+}
+
+void quickDelay(uint32_t delay)
+{
+  uint32_t startTime = HAL_GetTick();
+  while ((HAL_GetTick() - startTime) < delay)
+  {
+    // Do nothing, just wait
+  }
+}
 
 /* USER CODE END 0 */
 
@@ -90,11 +147,26 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_USART2_UART_Init();
+  MX_RTC_Init();
   /* USER CODE BEGIN 2 */
 #ifdef ECHOBACK
   // Enable USART2 receive interrupt
   USART2->CR1 |= USART_CR1_RXNEIE;
 #endif
+
+  /* Check if the RTC has been initialized */
+    if ((RCC->BDCR & RCC_BDCR_RTCEN) != RESET && (RTC->ISR & RTC_ISR_INITS) != RESET)
+    {
+      /* RTC has already been initialized */
+      /* No need to set the initial time again */
+    }
+    else
+    {
+      /* Set the initial time in the RTC */
+      setInitialTime();
+      /* Set a flag or backup domain value to indicate RTC initialization */
+    }
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -102,10 +174,20 @@ int main(void)
   while (1)
   {
     /* USER CODE END WHILE */
+
     /* USER CODE BEGIN 3 */
+	  /* Wait for a quick delay (e.g., 1 second) */
+	      quickDelay(1000);
+
+	      /* Get the current time from the RTC */
+	      getCurrentTime();
+
+	      /* Print the time in Tera Term */
+	      printf("Time: %s", timeString);
   }
   /* USER CODE END 3 */
 }
+
 /**
   * @brief System Clock Configuration
   * @retval None
@@ -123,9 +205,10 @@ void SystemClock_Config(void)
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
   */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI|RCC_OSCILLATORTYPE_LSI;
   RCC_OscInitStruct.HSIState = RCC_HSI_ON;
   RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
+  RCC_OscInitStruct.LSIState = RCC_LSI_ON;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
   RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI;
   RCC_OscInitStruct.PLL.PLLM = 16;
@@ -150,6 +233,41 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
+}
+
+/**
+  * @brief RTC Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_RTC_Init(void)
+{
+
+  /* USER CODE BEGIN RTC_Init 0 */
+
+  /* USER CODE END RTC_Init 0 */
+
+  /* USER CODE BEGIN RTC_Init 1 */
+
+  /* USER CODE END RTC_Init 1 */
+
+  /** Initialize RTC Only
+  */
+  hrtc.Instance = RTC;
+  hrtc.Init.HourFormat = RTC_HOURFORMAT_24;
+  hrtc.Init.AsynchPrediv = 127;
+  hrtc.Init.SynchPrediv = 255;
+  hrtc.Init.OutPut = RTC_OUTPUT_DISABLE;
+  hrtc.Init.OutPutPolarity = RTC_OUTPUT_POLARITY_HIGH;
+  hrtc.Init.OutPutType = RTC_OUTPUT_TYPE_OPENDRAIN;
+  if (HAL_RTC_Init(&hrtc) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN RTC_Init 2 */
+
+  /* USER CODE END RTC_Init 2 */
+
 }
 
 /**
