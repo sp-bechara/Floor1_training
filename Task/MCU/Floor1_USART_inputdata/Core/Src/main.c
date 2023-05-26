@@ -18,7 +18,6 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-//#define ECHOBACK 1
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 
@@ -36,15 +35,15 @@
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
-
+//#define ECHOBACK 1
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
-#if ECHOBACK
-char RecievedData;
+#ifdef ECHOBACK
+extern char RecievedData;
 #endif
 /* USER CODE END PV */
 
@@ -92,7 +91,7 @@ int main(void)
   MX_GPIO_Init();
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
-#if ECHOBACK
+#ifdef ECHOBACK
   // Enable USART2 receive interrupt
   USART2->CR1 |= USART_CR1_RXNEIE;
 #endif
@@ -162,7 +161,7 @@ static void MX_USART2_UART_Init(void)
 {
 
   /* USER CODE BEGIN USART2_Init 0 */
-#if ECHOBACK
+#ifdef ECHOBACK
 	huart2.RxXferSize = 512;
 #endif
   /* USER CODE END USART2_Init 0 */
@@ -226,18 +225,7 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-#if ECHOBACK
-void USART2_IRQHandler(void)
-{
-  /* USER CODE BEGIN USART2_IRQn 0 */
-	 if ((USART2->SR & USART_SR_RXNE) != 0)    // Check if data is received
-	    {
-	        RecievedData = USART2->DR;   // Read the received data
-	        USART2->DR = RecievedData;
-	    }
-  /* USER CODE END USART2_IRQn 0 */
-}
-#endif
+
 /* USER CODE END 4 */
 
 /**

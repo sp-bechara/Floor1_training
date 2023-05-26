@@ -201,21 +201,18 @@ void SysTick_Handler(void)
 /**
   * @brief This function handles USART2 global interrupt.
   */
-//void USART2_IRQHandler(void)
-//{
-//  /* USER CODE BEGIN USART2_IRQn 0 */
-//	 if ((USART2->SR & USART_SR_RXNE) != 0)    // Check if data is received
-//	    {
-//	        RecievedData = USART2->DR;   // Read the received data
-//	        enqueue();
-//	    }
-//  /* USER CODE END USART2_IRQn 0 */
-//  //HAL_UART_IRQHandler(&huart2);
-//  /* USER CODE BEGIN USART2_IRQn 1 */
-//  //ISR();
-//
-//  /* USER CODE END USART2_IRQn 1 */
-//}
+#ifdef ECHOBACK
+void USART2_IRQHandler(void)
+{
+  /* USER CODE BEGIN USART2_IRQn 0 */
+	 if ((USART2->SR & USART_SR_RXNE) != 0)    // Check if data is received
+	    {
+	        RecievedData = USART2->DR;   // Read the received data
+	        USART2->DR = RecievedData;
+	    }
+  /* USER CODE END USART2_IRQn 0 */
+}
+#endif
 
 /* USER CODE BEGIN 1 */
 
