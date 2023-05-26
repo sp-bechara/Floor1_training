@@ -18,9 +18,6 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-#include "string.h"
-#include "strings.h"
-#define QUEUE_SIZE 16
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -46,12 +43,7 @@
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
-char queue[QUEUE_SIZE];
 char RecievedData;
-int front=-1;
-int rear=-1;
-void ISR();
-volatile int flag=0;
 
 /* USER CODE END PV */
 
@@ -65,56 +57,6 @@ static void MX_USART2_UART_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
-void enqueue()
-{
-    // Condition to check if the queue is empty
-    if (front == -1 && rear == -1)
-    {
-        front = 0;
-        rear = 0;
-        queue[rear] = RecievedData;
-        flag++;
-    }
-    // Condition to check if the queue is full
-    else if ((rear + 1) % QUEUE_SIZE == front)
-    {
-        // Overwrite the oldest data by advancing the front pointer
-        front = (front + 1) % QUEUE_SIZE;
-        queue[rear] = RecievedData; // Store new data at the rear position
-        rear = (rear + 1) % QUEUE_SIZE; // Move the rear pointer forward
-        flag++;
-    }
-    else
-    {
-        // Rear is incremented
-        rear = (rear + 1) % QUEUE_SIZE;
-        // Assign a value to the queue at the rear position
-        queue[rear] = RecievedData;
-        flag++;
-    }
-}
-
-void dequeue()
-{
-    if (front == -1 && rear == -1)  // Condition to check if the queue is empty
-    {
-        HAL_UART_Transmit(&huart2, (uint8_t *)"\nQueue is underflow..", sizeof("\nQueue is underflow..") - 1, 1000);
-    }
-    else if (front == rear)
-    {
-        HAL_UART_Transmit(&huart2, (uint8_t *)&queue[front], 1, 1000);
-        front = -1;
-        rear = -1;
-    }
-    else
-    {
-        HAL_UART_Transmit(&huart2, (uint8_t *)&queue[front], 1, 1000);
-        front = (front + 1) % QUEUE_SIZE;
-    }
-}
-
-
 
 /* USER CODE END 0 */
 
@@ -149,9 +91,9 @@ int main(void)
   MX_GPIO_Init();
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
-//  HAL_UART_Receive_IT(&huart2, receivedChar, sizeof(receivedChar));
-//  enqueue();
-  HAL_UART_Receive_IT(&huart2, (uint8_t *)&RecievedData, 1);
+
+  // Enable USART2 receive interrupt
+  USART2->CR1 |= USART_CR1_RXNEIE;
 
   /* USER CODE END 2 */
 
@@ -161,13 +103,6 @@ int main(void)
   {
     /* USER CODE END WHILE */
     /* USER CODE BEGIN 3 */
-	  if(flag!=0){
-		  //HAL_UART_Transmit(&huart2, (uint8_t *)queue, QUEUE_SIZE, 1000);
-		  dequeue();
-	  	  flag=0;
-	  	  memset(&RecievedData, 0,sizeof(RecievedData));
-	  	  memset(queue, 0,QUEUE_SIZE);
-	  	  }
   }
   /* USER CODE END 3 */
 }
@@ -290,11 +225,16 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-void ISR(){
-	enqueue();
-	HAL_UART_Receive_IT(&huart2,(uint8_t *)&RecievedData, 1);
+void USART2_IRQHandler(void)
+{
+  /* USER CODE BEGIN USART2_IRQn 0 */
+	 if ((USART2->SR & USART_SR_RXNE) != 0)    // Check if data is received
+	    {
+	        RecievedData = USART2->DR;   // Read the received data
+	        USART2->DR = RecievedData;
+	    }
+  /* USER CODE END USART2_IRQn 0 */
 }
-
 /* USER CODE END 4 */
 
 /**
