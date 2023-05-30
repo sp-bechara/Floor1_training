@@ -39,9 +39,6 @@
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
-//#define ECHOBACK 1
-//#define R_T_C 1
-
 #ifdef R_T_C
 #define MAX_TIME_STRING_LENGTH 35  // Maximum length for time string (including null terminator)
 #endif
@@ -54,7 +51,7 @@ UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
 #ifdef ECHOBACK
-extern char RecievedData;
+char RecievedData;
 #endif
 
 #ifdef R_T_C
@@ -346,9 +343,7 @@ static void MX_USART2_UART_Init(void)
 {
 
   /* USER CODE BEGIN USART2_Init 0 */
-#ifdef ECHOBACK
 	huart2.RxXferSize = 512;
-#endif
   /* USER CODE END USART2_Init 0 */
 
   /* USER CODE BEGIN USART2_Init 1 */
