@@ -40,7 +40,11 @@
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
 //#define ECHOBACK 1
+//#define R_T_C 1
+
+#ifdef R_T_C
 #define MAX_TIME_STRING_LENGTH 35  // Maximum length for time string (including null terminator)
+#endif
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
@@ -53,10 +57,13 @@ UART_HandleTypeDef huart2;
 extern char RecievedData;
 #endif
 
+#ifdef R_T_C
 RTC_TimeTypeDef sTime;
 RTC_DateTypeDef sDate;
 RTC_AlarmTypeDef sAlarm;
 char timeString[MAX_TIME_STRING_LENGTH]; // Time string
+int flag=0;
+#endif
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -70,6 +77,7 @@ static void MX_RTC_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+#ifdef R_T_C
 void setInitialTime(void)
 {
 
@@ -104,7 +112,7 @@ void getCurrentTime(void)
 void setAlarm(void){
 	sAlarm.Alarm = RTC_ALARM_A;
 	sAlarm.AlarmTime.Hours = 00;          // Set the alarm hours
-	sAlarm.AlarmTime.Minutes = 00;         // Set the alarm minutes
+	sAlarm.AlarmTime.Minutes = 0;         // Set the alarm minutes
 	sAlarm.AlarmTime.Seconds = 30;        // Set the alarm seconds
 	sAlarm.AlarmTime.TimeFormat = RTC_HOURFORMAT12_AM;  // Set the alarm time format
 	sAlarm.AlarmDateWeekDaySel = RTC_ALARMDATEWEEKDAYSEL_DATE;  // Set the alarm to trigger on date
@@ -119,8 +127,9 @@ void toDoOnAlarm(void)
 {
 
 	// Handle alarm event
-    	HAL_UART_Transmit(&huart2, (uint8_t *)"ALarm is called", sizeof("ALarm is called"), 1000);
+	flag++;
 }
+#endif
 
 /* USER CODE END 0 */
 
@@ -160,6 +169,7 @@ int main(void)
   USART2->CR1 |= USART_CR1_RXNEIE;
 #endif
 
+#ifdef R_T_C
   /* Check if the RTC has been initialized */
   if (HAL_RTCEx_BKUPRead(&hrtc, RTC_BKP_DR1) != 0x32F2)
   {
@@ -168,7 +178,7 @@ int main(void)
   }
 
   setAlarm();
-
+#endif
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -178,7 +188,7 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-
+#ifdef R_T_C
 	  /* Wait for a quick delay (e.g., 1 second) */
 	  	  	  HAL_Delay(1000);
 //
@@ -188,6 +198,12 @@ int main(void)
 //	      /* Print the timeS in Tera Term */
 	      HAL_UART_Transmit(&huart2, (uint8_t *)timeString, MAX_TIME_STRING_LENGTH, 1000);
 	      HAL_UART_Transmit(&huart2, (uint8_t *)"\n", sizeof("\n"), 1000);
+	      if(flag!=0)
+	      {
+	        HAL_UART_Transmit(&huart2, (uint8_t *)"ALarm is called", sizeof("ALarm is called"), 1000);
+	        flag=0;
+	      }
+#endif
   }
   /* USER CODE END 3 */
 }
