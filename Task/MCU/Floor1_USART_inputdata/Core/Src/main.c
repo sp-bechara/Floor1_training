@@ -35,7 +35,6 @@
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
-//#define ECHOBACK 1
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
@@ -43,7 +42,7 @@ UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
 #ifdef ECHOBACK
-extern char RecievedData;
+char RecievedData;
 #endif
 /* USER CODE END PV */
 
@@ -161,9 +160,7 @@ static void MX_USART2_UART_Init(void)
 {
 
   /* USER CODE BEGIN USART2_Init 0 */
-#ifdef ECHOBACK
 	huart2.RxXferSize = 512;
-#endif
   /* USER CODE END USART2_Init 0 */
 
   /* USER CODE BEGIN USART2_Init 1 */
