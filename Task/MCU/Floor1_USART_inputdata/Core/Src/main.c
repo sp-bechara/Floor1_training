@@ -52,7 +52,7 @@ UART_HandleTypeDef huart2;
 /* USER CODE BEGIN PV */
 #ifdef ECHOBACK
 char RecievedData;
-#endif
+#endif //ifdef ECHOBACK
 
 #ifdef R_T_C
 RTC_TimeTypeDef sTime;
@@ -164,7 +164,7 @@ int main(void)
 #ifdef ECHOBACK
   // Enable USART2 receive interrupt
   USART2->CR1 |= USART_CR1_RXNEIE;
-#endif
+#endif //ifdef ECHOBACK
 
 #ifdef R_T_C
   /* Check if the RTC has been initialized */
