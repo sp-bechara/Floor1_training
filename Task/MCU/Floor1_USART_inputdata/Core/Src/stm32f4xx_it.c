@@ -212,7 +212,7 @@ void USART2_IRQHandler(void)
 		 RecievedData = USART2->DR;   // Read the received data
 	        USART2->DR = RecievedData;
 	    }
-#endif
+#endif //ifdef ECHOBACK
   /* USER CODE END USART2_IRQn 0 */
 }
 

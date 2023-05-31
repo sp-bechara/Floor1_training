@@ -43,7 +43,7 @@ UART_HandleTypeDef huart2;
 /* USER CODE BEGIN PV */
 #ifdef ECHOBACK
 char RecievedData;
-#endif
+#endif //ifdef ECHOBACK
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -93,7 +93,7 @@ int main(void)
 #ifdef ECHOBACK
   // Enable USART2 receive interrupt
   USART2->CR1 |= USART_CR1_RXNEIE;
-#endif
+#endif //ifdef ECHOBACK
   /* USER CODE END 2 */
 
   /* Infinite loop */
