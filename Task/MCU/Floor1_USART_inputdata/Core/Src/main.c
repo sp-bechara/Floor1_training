@@ -79,9 +79,9 @@ void setInitialTime(void)
 {
 
   /* Configure the RTC time structure */
-  sTime.Hours = 12;
-  sTime.Minutes = 0;
-  sTime.Seconds = 0;
+  sTime.Hours = 00;
+  sTime.Minutes = 00;
+  sTime.Seconds = 00;
   sTime.TimeFormat = RTC_HOURFORMAT12_AM;
   sTime.DayLightSaving = RTC_DAYLIGHTSAVING_NONE;
   sTime.StoreOperation = RTC_STOREOPERATION_RESET;
@@ -109,8 +109,8 @@ void getCurrentTime(void)
 void setAlarm(void){
 	sAlarm.Alarm = RTC_ALARM_A;
 	sAlarm.AlarmTime.Hours = 00;          // Set the alarm hours
-	sAlarm.AlarmTime.Minutes = 0;         // Set the alarm minutes
-	sAlarm.AlarmTime.Seconds = 30;        // Set the alarm seconds
+	sAlarm.AlarmTime.Minutes = 1;         // Set the alarm minutes
+	sAlarm.AlarmTime.Seconds = 00;        // Set the alarm seconds
 	sAlarm.AlarmTime.TimeFormat = RTC_HOURFORMAT12_AM;  // Set the alarm time format
 	sAlarm.AlarmDateWeekDaySel = RTC_ALARMDATEWEEKDAYSEL_DATE;  // Set the alarm to trigger on date
 	sAlarm.AlarmMask = RTC_ALARMMASK_DATEWEEKDAY;  // Set the alarm mask to trigger on date match
@@ -173,7 +173,6 @@ int main(void)
       //set the time
       setInitialTime();
   }
-
   setAlarm();
 #endif
   /* USER CODE END 2 */
@@ -186,6 +185,11 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
 #ifdef R_T_C
+	  if(flag!=0)
+	  	      {
+	  	        HAL_UART_Transmit(&huart2, (uint8_t *)"ALarm is called", sizeof("ALarm is called"), 1000);
+	  	        flag=0;
+	  	      }
 	  /* Wait for a quick delay (e.g., 1 second) */
 	  	  	  HAL_Delay(1000);
 //
@@ -195,11 +199,7 @@ int main(void)
 //	      /* Print the timeS in Tera Term */
 	      HAL_UART_Transmit(&huart2, (uint8_t *)timeString, MAX_TIME_STRING_LENGTH, 1000);
 	      HAL_UART_Transmit(&huart2, (uint8_t *)"\n", sizeof("\n"), 1000);
-	      if(flag!=0)
-	      {
-	        HAL_UART_Transmit(&huart2, (uint8_t *)"ALarm is called", sizeof("ALarm is called"), 1000);
-	        flag=0;
-	      }
+
 #endif
   }
   /* USER CODE END 3 */
