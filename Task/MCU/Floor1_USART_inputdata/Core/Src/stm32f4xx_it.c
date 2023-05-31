@@ -41,8 +41,8 @@
 
 /* Private variables ---------------------------------------------------------*/
 /* USER CODE BEGIN PV */
-uint8_t received_Data;
 
+//extern char RecievedData;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -56,6 +56,7 @@ uint8_t received_Data;
 /* USER CODE END 0 */
 
 /* External variables --------------------------------------------------------*/
+extern RTC_HandleTypeDef hrtc;
 extern UART_HandleTypeDef huart2;
 /* USER CODE BEGIN EV */
 
@@ -205,14 +206,32 @@ void SysTick_Handler(void)
 void USART2_IRQHandler(void)
 {
   /* USER CODE BEGIN USART2_IRQn 0 */
-
+#ifdef ECHOBACK
+	 if ((USART2->SR & USART_SR_RXNE) != 0)    // Check if data is received
+	    {
+		 RecievedData = USART2->DR;   // Read the received data
+	        USART2->DR = RecievedData;
+	    }
+#endif //ifdef ECHOBACK
   /* USER CODE END USART2_IRQn 0 */
   HAL_UART_IRQHandler(&huart2);
   /* USER CODE BEGIN USART2_IRQn 1 */
 
-	  inter();
-
   /* USER CODE END USART2_IRQn 1 */
+}
+
+/**
+  * @brief This function handles RTC alarms A and B interrupt through EXTI line 17.
+  */
+void RTC_Alarm_IRQHandler(void)
+{
+  /* USER CODE BEGIN RTC_Alarm_IRQn 0 */
+
+  /* USER CODE END RTC_Alarm_IRQn 0 */
+  HAL_RTC_AlarmIRQHandler(&hrtc);
+  /* USER CODE BEGIN RTC_Alarm_IRQn 1 */
+
+  /* USER CODE END RTC_Alarm_IRQn 1 */
 }
 
 /* USER CODE BEGIN 1 */
