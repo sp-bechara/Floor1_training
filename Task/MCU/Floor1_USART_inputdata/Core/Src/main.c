@@ -41,7 +41,7 @@
 /* USER CODE BEGIN PM */
 #ifdef R_T_C
 #define MAX_TIME_STRING_LENGTH 35  // Maximum length for time string (including null terminator)
-#endif
+#endif //ifdef R_T_C
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
@@ -59,8 +59,8 @@ RTC_TimeTypeDef sTime;
 RTC_DateTypeDef sDate;
 RTC_AlarmTypeDef sAlarm;
 char timeString[MAX_TIME_STRING_LENGTH]; // Time string
-int flag=0;
-#endif
+int RTC_Interrupt_flag=0;
+#endif //ifdef R_T_C
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -124,9 +124,9 @@ void toDoOnAlarm(void)
 {
 
 	// Handle alarm event
-	flag++;
+	RTC_Interrupt_flag++;
 }
-#endif
+#endif //ifdef R_T_C
 
 /* USER CODE END 0 */
 
@@ -174,7 +174,7 @@ int main(void)
       setInitialTime();
   }
   setAlarm();
-#endif
+#endif //ifdef R_T_C
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -185,10 +185,10 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
 #ifdef R_T_C
-	  if(flag!=0)
+	  if(RTC_Interrupt_flag!=0)
 	  	      {
 	  	        HAL_UART_Transmit(&huart2, (uint8_t *)"ALarm is called", sizeof("ALarm is called"), 1000);
-	  	        flag=0;
+	  	      RTC_Interrupt_flag=0;
 	  	      }
 	  /* Wait for a quick delay (e.g., 1 second) */
 	  	  	  HAL_Delay(1000);
@@ -200,7 +200,7 @@ int main(void)
 	      HAL_UART_Transmit(&huart2, (uint8_t *)timeString, MAX_TIME_STRING_LENGTH, 1000);
 	      HAL_UART_Transmit(&huart2, (uint8_t *)"\n", sizeof("\n"), 1000);
 
-#endif
+#endif //ifdef R_T_C
   }
   /* USER CODE END 3 */
 }
@@ -385,17 +385,17 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(B2__pin_GPIO_Port, B2__pin_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(B1_GPIO_Port, B1_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);
 
-  /*Configure GPIO pin : B2__pin_Pin */
-  GPIO_InitStruct.Pin = B2__pin_Pin;
+  /*Configure GPIO pin : B1_Pin */
+  GPIO_InitStruct.Pin = B1_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(B2__pin_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(B1_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pin : LD2_Pin */
   GPIO_InitStruct.Pin = LD2_Pin;

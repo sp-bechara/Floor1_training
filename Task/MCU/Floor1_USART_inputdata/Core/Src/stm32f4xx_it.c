@@ -203,7 +203,6 @@ void SysTick_Handler(void)
 /**
   * @brief This function handles USART2 global interrupt.
   */
-
 void USART2_IRQHandler(void)
 {
   /* USER CODE BEGIN USART2_IRQn 0 */
@@ -220,10 +219,10 @@ void USART2_IRQHandler(void)
 
   /* USER CODE END USART2_IRQn 1 */
 }
+
 /**
   * @brief This function handles RTC alarms A and B interrupt through EXTI line 17.
   */
-#ifdef R_T_C
 void RTC_Alarm_IRQHandler(void)
 {
   /* USER CODE BEGIN RTC_Alarm_IRQn 0 */
@@ -234,7 +233,6 @@ void RTC_Alarm_IRQHandler(void)
 
   /* USER CODE END RTC_Alarm_IRQn 1 */
 }
-#endif
 
 /* USER CODE BEGIN 1 */
 
