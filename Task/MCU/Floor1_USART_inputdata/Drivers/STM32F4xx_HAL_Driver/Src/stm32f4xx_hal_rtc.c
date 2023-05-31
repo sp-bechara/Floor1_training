@@ -1582,7 +1582,9 @@ __weak void HAL_RTC_AlarmAEventCallback(RTC_HandleTypeDef *hrtc)
 {
   /* Prevent unused argument(s) compilation warning */
   UNUSED(hrtc);
-
+#ifdef R_T_C
+  toDoOnAlarm();
+#endif //#ifdef R_T_C
   /* NOTE: This function should not be modified, when the callback is needed,
            the HAL_RTC_AlarmAEventCallback could be implemented in the user file
    */

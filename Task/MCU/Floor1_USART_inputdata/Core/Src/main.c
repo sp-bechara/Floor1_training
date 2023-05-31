@@ -187,7 +187,7 @@ int main(void)
 #ifdef R_T_C
 	  if(RTC_Interrupt_flag!=0)
 	  	      {
-	  	        HAL_UART_Transmit(&huart2, (uint8_t *)"ALarm is called", sizeof("ALarm is called"), 1000);
+	  	      HAL_UART_Transmit(&huart2, (uint8_t *)"ALarm is called", sizeof("ALarm is called"), 1000);
 	  	      RTC_Interrupt_flag=0;
 	  	      }
 	  /* Wait for a quick delay (e.g., 1 second) */
