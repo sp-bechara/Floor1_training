@@ -23,6 +23,7 @@
 /* USER CODE BEGIN Includes */
 #include "stm32f4xx_hal_rtc.h"
 #include "stdio.h"
+#include "stdlib.h"
 
 
 /* USER CODE END Includes */
@@ -45,6 +46,8 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+IWDG_HandleTypeDef hiwdg;
+
 RTC_HandleTypeDef hrtc;
 
 UART_HandleTypeDef huart2;
@@ -61,6 +64,16 @@ RTC_AlarmTypeDef sAlarm;
 char timeString[MAX_TIME_STRING_LENGTH]; // Time string
 int RTC_Interrupt_flag=0;
 #endif //ifdef R_T_C
+
+#ifdef I_W_D_G
+//IWDG_TIMEOUT value can be between 0 to 32768
+#define IWDG_TIMEOUT 33000
+#define CLOCK_FREQUENCY 32000
+#define RELOAD_RANGE 4096
+int iwdgFlag=0;
+uint32_t prescaler=0;
+uint32_t prescalerIndex=0;
+#endif //#ifdef I_W_D_G
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -68,6 +81,7 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_RTC_Init(void);
+static void MX_IWDG_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -128,6 +142,13 @@ void toDoOnAlarm(void)
 }
 #endif //ifdef R_T_C
 
+#ifdef I_W_D_G
+void watchdogFeed(void)
+{
+  HAL_IWDG_Refresh(&hiwdg);
+}
+#endif //#ifdef I_W_D_G
+
 /* USER CODE END 0 */
 
 /**
@@ -137,6 +158,8 @@ void toDoOnAlarm(void)
 int main(void)
 {
   /* USER CODE BEGIN 1 */
+
+
 
   /* USER CODE END 1 */
 
@@ -160,7 +183,12 @@ int main(void)
   MX_GPIO_Init();
   MX_USART2_UART_Init();
   MX_RTC_Init();
+  MX_IWDG_Init();
   /* USER CODE BEGIN 2 */
+#ifdef I_W_D_G
+  HAL_UART_Transmit(&huart2, (uint8_t *)"Watchdog is initialized\n", sizeof("Watchdog is initialized\n"), 1000);
+#endif //#ifdef I_W_D_G
+
 #ifdef ECHOBACK
   // Enable USART2 receive interrupt
   USART2->CR1 |= USART_CR1_RXNEIE;
@@ -175,6 +203,12 @@ int main(void)
   }
   setAlarm();
 #endif //ifdef R_T_C
+
+#ifdef I_W_D_G
+  // Get the current time
+   uint32_t startTime = HAL_GetTick();
+   uint32_t elapsedTime = 0;
+#endif //#ifdef I_W_D_G
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -187,7 +221,7 @@ int main(void)
 #ifdef R_T_C
 	  if(RTC_Interrupt_flag!=0)
 	  	      {
-	  	      HAL_UART_Transmit(&huart2, (uint8_t *)"ALarm is called", sizeof("ALarm is called"), 1000);
+
 	  	      RTC_Interrupt_flag=0;
 	  	      }
 	  /* Wait for a quick delay (e.g., 1 second) */
@@ -201,6 +235,24 @@ int main(void)
 	      HAL_UART_Transmit(&huart2, (uint8_t *)"\n", sizeof("\n"), 1000);
 
 #endif //ifdef R_T_C
+
+#ifdef I_W_D_G
+	      // Get the elapsed time since starting
+	          elapsedTime = HAL_GetTick() - startTime;
+
+	      // Check if the first 30 seconds have elapsed
+	          if (elapsedTime <= IWDG_TIMEOUT)
+	          {
+	            // Send signal to the watchdog
+	        	HAL_UART_Transmit(&huart2, (uint8_t *)"Health is Okay..!\n", sizeof("Health is Okay..!\n"), 1000);
+	        	HAL_Delay(1000);
+	        	watchdogFeed();
+	          }
+	          else{
+	        	  HAL_UART_Transmit(&huart2, (uint8_t *)"Health signal is stopped..!\n", sizeof("Health signal is stopped..!\n"), 1000);
+	        	  HAL_Delay(1000);
+	      }
+#endif //#ifdef I_W_D_G
   }
   /* USER CODE END 3 */
 }
@@ -250,6 +302,52 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
+}
+
+/**
+  * @brief IWDG Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_IWDG_Init(void)
+{
+
+  /* USER CODE BEGIN IWDG_Init 0 */
+#ifdef I_W_D_G
+	prescaler = (CLOCK_FREQUENCY * IWDG_TIMEOUT) / RELOAD_RANGE;
+	uint8_t prescalerIndex;  // Default index
+	// Perform bitwise right shift operations to determine the index
+	prescalerIndex = (prescaler <= 4) ? 0 :
+	                 (prescaler <= 8) ? 1 :
+	                 (prescaler <= 16) ? 2 :
+	                 (prescaler <= 32) ? 3 :
+	                 (prescaler <= 64) ? 4 :
+	                 (prescaler <= 128) ? 5 : 6;
+	uint32_t prescalerValue = 1 << prescalerIndex;
+	uint32_t reloadValue=((IWDG_TIMEOUT * CLOCK_FREQUENCY) / (4 * prescalerValue * 1000)) - 1;
+	if(reloadValue==0 ||reloadValue>RELOAD_RANGE-1){
+    	HAL_UART_Transmit(&huart2, (uint8_t *)"OOPS! It seems reload value exceed limit, please recheck IWDG_TIMEOUT value\n", sizeof("OOPS! It seems reload value exceed limit, please recheck IWDG_TIMEOUT value!\n"), 1000);
+    	exit(1);
+	}
+#endif //#ifdef I_W_D_G
+  /* USER CODE END IWDG_Init 0 */
+
+  /* USER CODE BEGIN IWDG_Init 1 */
+
+  /* USER CODE END IWDG_Init 1 */
+  hiwdg.Instance = IWDG;
+#ifdef I_W_D_G
+  hiwdg.Init.Prescaler = prescalerIndex;
+  hiwdg.Init.Reload = reloadValue;
+#endif //#ifdef I_W_D_G
+  if (HAL_IWDG_Init(&hiwdg) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN IWDG_Init 2 */
+
+  /* USER CODE END IWDG_Init 2 */
+
 }
 
 /**
@@ -343,7 +441,9 @@ static void MX_USART2_UART_Init(void)
 {
 
   /* USER CODE BEGIN USART2_Init 0 */
+#ifdef ECHOBACK
 	huart2.RxXferSize = 512;
+#endif //#ifdef ECHOBACK
   /* USER CODE END USART2_Init 0 */
 
   /* USER CODE BEGIN USART2_Init 1 */
