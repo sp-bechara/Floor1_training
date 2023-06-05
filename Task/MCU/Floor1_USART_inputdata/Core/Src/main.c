@@ -23,9 +23,6 @@
 /* USER CODE BEGIN Includes */
 #include "stm32f4xx_hal_rtc.h"
 #include "stdio.h"
-#include "stdlib.h"
-
-
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -67,7 +64,10 @@ int RTC_Interrupt_flag=0;
 
 #ifdef I_W_D_G
 //IWDG_TIMEOUT value can be between 0 to 32768
-#define IWDG_TIMEOUT 33000
+#define IWDG_TIMEOUT 30000
+#if (IWDG_TIMEOUT < 0 || IWDG_TIMEOUT > 32767)
+    #error Invalid IWDG_TIMEOUT value. It must be within the range of 0 to 32767.
+#endif
 #define CLOCK_FREQUENCY 32000
 #define RELOAD_RANGE 4096
 int iwdgFlag=0;
@@ -141,14 +141,6 @@ void toDoOnAlarm(void)
 	RTC_Interrupt_flag++;
 }
 #endif //ifdef R_T_C
-
-#ifdef I_W_D_G
-void watchdogFeed(void)
-{
-  HAL_IWDG_Refresh(&hiwdg);
-}
-#endif //#ifdef I_W_D_G
-
 /* USER CODE END 0 */
 
 /**
@@ -158,8 +150,6 @@ void watchdogFeed(void)
 int main(void)
 {
   /* USER CODE BEGIN 1 */
-
-
 
   /* USER CODE END 1 */
 
@@ -221,7 +211,7 @@ int main(void)
 #ifdef R_T_C
 	  if(RTC_Interrupt_flag!=0)
 	  	      {
-
+		  	  HAL_UART_Transmit(&huart2, (uint8_t *)"ALarm is called", sizeof("ALarm is called"), 1000);
 	  	      RTC_Interrupt_flag=0;
 	  	      }
 	  /* Wait for a quick delay (e.g., 1 second) */
@@ -246,7 +236,7 @@ int main(void)
 	            // Send signal to the watchdog
 	        	HAL_UART_Transmit(&huart2, (uint8_t *)"Health is Okay..!\n", sizeof("Health is Okay..!\n"), 1000);
 	        	HAL_Delay(1000);
-	        	watchdogFeed();
+	        	HAL_IWDG_Refresh(&hiwdg);
 	          }
 	          else{
 	        	  HAL_UART_Transmit(&huart2, (uint8_t *)"Health signal is stopped..!\n", sizeof("Health signal is stopped..!\n"), 1000);
@@ -314,7 +304,7 @@ static void MX_IWDG_Init(void)
 
   /* USER CODE BEGIN IWDG_Init 0 */
 #ifdef I_W_D_G
-	prescaler = (CLOCK_FREQUENCY * IWDG_TIMEOUT) / RELOAD_RANGE;
+	prescaler = (CLOCK_FREQUENCY * (IWDG_TIMEOUT/1000)) / RELOAD_RANGE;
 	uint8_t prescalerIndex;  // Default index
 	// Perform bitwise right shift operations to determine the index
 	prescalerIndex = (prescaler <= 4) ? 0 :
@@ -323,12 +313,7 @@ static void MX_IWDG_Init(void)
 	                 (prescaler <= 32) ? 3 :
 	                 (prescaler <= 64) ? 4 :
 	                 (prescaler <= 128) ? 5 : 6;
-	uint32_t prescalerValue = 1 << prescalerIndex;
-	uint32_t reloadValue=((IWDG_TIMEOUT * CLOCK_FREQUENCY) / (4 * prescalerValue * 1000)) - 1;
-	if(reloadValue==0 ||reloadValue>RELOAD_RANGE-1){
-    	HAL_UART_Transmit(&huart2, (uint8_t *)"OOPS! It seems reload value exceed limit, please recheck IWDG_TIMEOUT value\n", sizeof("OOPS! It seems reload value exceed limit, please recheck IWDG_TIMEOUT value!\n"), 1000);
-    	exit(1);
-	}
+	uint32_t reloadValue=((IWDG_TIMEOUT * CLOCK_FREQUENCY) / (4 * (1 << prescalerIndex) * 1000)) - 1;
 #endif //#ifdef I_W_D_G
   /* USER CODE END IWDG_Init 0 */
 
