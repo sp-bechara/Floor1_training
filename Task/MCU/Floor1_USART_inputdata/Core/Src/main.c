@@ -49,6 +49,8 @@ RTC_HandleTypeDef hrtc;
 
 UART_HandleTypeDef huart2;
 
+WWDG_HandleTypeDef hwwdg;
+
 /* USER CODE BEGIN PV */
 #ifdef ECHOBACK
 char RecievedData;
@@ -74,6 +76,10 @@ int iwdgFlag=0;
 uint32_t prescaler=0;
 uint32_t prescalerIndex=0;
 #endif //#ifdef I_W_D_G
+
+#ifdef W_W_D_G
+volatile int windowWatchdogInterruptFlag=0;
+#endif //#ifdef W_W_D_G
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -82,6 +88,7 @@ static void MX_GPIO_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_RTC_Init(void);
 static void MX_IWDG_Init(void);
+static void MX_WWDG_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -141,6 +148,13 @@ void toDoOnAlarm(void)
 	RTC_Interrupt_flag++;
 }
 #endif //ifdef R_T_C
+
+#ifdef W_W_D_G
+void watchdogFeed(void){
+	HAL_WWDG_Refresh(&hwwdg);
+	windowWatchdogInterruptFlag=0;
+}
+#endif //#ifdef W_W_D_G
 /* USER CODE END 0 */
 
 /**
@@ -173,7 +187,11 @@ int main(void)
   MX_GPIO_Init();
   MX_USART2_UART_Init();
   MX_RTC_Init();
-  MX_IWDG_Init();
+  //MX_IWDG_Init();
+#ifdef W_W_D_G
+  HAL_UART_Transmit(&huart2, (uint8_t *)"Window Watchdog is initialized\n", sizeof("Window Watchdog is initialized\n"), 1000);
+#endif //#ifdef W_W_D_G
+  MX_WWDG_Init();
   /* USER CODE BEGIN 2 */
 #ifdef I_W_D_G
   HAL_UART_Transmit(&huart2, (uint8_t *)"Watchdog is initialized\n", sizeof("Watchdog is initialized\n"), 1000);
@@ -200,12 +218,21 @@ int main(void)
    uint32_t elapsedTime = 0;
 #endif //#ifdef I_W_D_G
   /* USER CODE END 2 */
-
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
     /* USER CODE END WHILE */
+#ifdef W_W_D_G
+	  HAL_Delay(5000);
+	  watchdogFeed();
+	  HAL_Delay(10000);
+	  watchdogFeed();
+	  HAL_Delay(10000);
+	  watchdogFeed();
+	  HAL_Delay(40000);
+	  watchdogFeed();
+#endif //#ifdef W_W_D_G
 
     /* USER CODE BEGIN 3 */
 #ifdef R_T_C
@@ -321,10 +348,8 @@ static void MX_IWDG_Init(void)
 
   /* USER CODE END IWDG_Init 1 */
   hiwdg.Instance = IWDG;
-#ifdef I_W_D_G
-  hiwdg.Init.Prescaler = prescalerIndex;
-  hiwdg.Init.Reload = reloadValue;
-#endif //#ifdef I_W_D_G
+  hiwdg.Init.Prescaler = IWDG_PRESCALER_4;
+  hiwdg.Init.Reload = 3749;
   if (HAL_IWDG_Init(&hiwdg) != HAL_OK)
   {
     Error_Handler();
@@ -449,6 +474,36 @@ static void MX_USART2_UART_Init(void)
   /* USER CODE BEGIN USART2_Init 2 */
 
   /* USER CODE END USART2_Init 2 */
+
+}
+
+/**
+  * @brief WWDG Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_WWDG_Init(void)
+{
+
+  /* USER CODE BEGIN WWDG_Init 0 */
+
+  /* USER CODE END WWDG_Init 0 */
+
+  /* USER CODE BEGIN WWDG_Init 1 */
+
+  /* USER CODE END WWDG_Init 1 */
+  hwwdg.Instance = WWDG;
+  hwwdg.Init.Prescaler = WWDG_PRESCALER_8;
+  hwwdg.Init.Window = 127;
+  hwwdg.Init.Counter = 127;
+  hwwdg.Init.EWIMode = WWDG_EWI_ENABLE;
+  if (HAL_WWDG_Init(&hwwdg) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN WWDG_Init 2 */
+
+  /* USER CODE END WWDG_Init 2 */
 
 }
 
