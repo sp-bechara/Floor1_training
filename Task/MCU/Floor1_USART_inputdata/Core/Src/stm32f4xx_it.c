@@ -36,6 +36,7 @@
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
+#define windowWatchdogInterruptCount 600
 
 /* USER CODE END PM */
 
@@ -58,6 +59,7 @@
 /* External variables --------------------------------------------------------*/
 extern RTC_HandleTypeDef hrtc;
 extern UART_HandleTypeDef huart2;
+extern WWDG_HandleTypeDef hwwdg;
 /* USER CODE BEGIN EV */
 
 /* USER CODE END EV */
@@ -199,6 +201,28 @@ void SysTick_Handler(void)
 /* For the available peripheral interrupt handler names,                      */
 /* please refer to the startup file (startup_stm32f4xx.s).                    */
 /******************************************************************************/
+
+/**
+  * @brief This function handles Window watchdog interrupt.
+  */
+void WWDG_IRQHandler(void)
+{
+  /* USER CODE BEGIN WWDG_IRQn 0 */
+
+  /* USER CODE END WWDG_IRQn 0 */
+#ifdef W_W_D_G
+	  HAL_WWDG_Refresh(&hwwdg);
+	  windowWatchdogInterruptFlag++;
+	  if(windowWatchdogInterruptFlag == windowWatchdogInterruptCount){
+	  		    		  HAL_Delay(49);
+	  		    	  }
+#endif //#ifdef W_W_D_G
+  HAL_WWDG_IRQHandler(&hwwdg);
+
+  /* USER CODE BEGIN WWDG_IRQn 1 */
+
+  /* USER CODE END WWDG_IRQn 1 */
+}
 
 /**
   * @brief This function handles USART2 global interrupt.
