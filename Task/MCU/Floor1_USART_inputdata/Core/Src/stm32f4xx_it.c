@@ -209,15 +209,7 @@ void WWDG_IRQHandler(void)
   /* USER CODE BEGIN WWDG_IRQn 0 */
 
   /* USER CODE END WWDG_IRQn 0 */
-#ifdef W_W_D_G
-	  HAL_WWDG_Refresh(&hwwdg);
-	  windowWatchdogInterruptFlag++;
-	  if(windowWatchdogInterruptFlag == 600){
-	  		    		  HAL_Delay(49);
-	  		    	  }
-#endif //#ifdef W_W_D_G
   HAL_WWDG_IRQHandler(&hwwdg);
-
   /* USER CODE BEGIN WWDG_IRQn 1 */
 
   /* USER CODE END WWDG_IRQn 1 */

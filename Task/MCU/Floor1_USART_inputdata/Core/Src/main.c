@@ -23,6 +23,9 @@
 /* USER CODE BEGIN Includes */
 #include "stm32f4xx_hal_rtc.h"
 #include "stdio.h"
+#include "fonts.h"
+#include "ssd1306.h"
+#include "stm32f4xx_hal_i2c.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -43,6 +46,8 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+I2C_HandleTypeDef hi2c1;
+
 IWDG_HandleTypeDef hiwdg;
 
 RTC_HandleTypeDef hrtc;
@@ -89,6 +94,7 @@ static void MX_USART2_UART_Init(void);
 static void MX_RTC_Init(void);
 static void MX_IWDG_Init(void);
 static void MX_WWDG_Init(void);
+static void MX_I2C1_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -124,7 +130,13 @@ void getCurrentTime(void)
   HAL_RTC_GetDate(&hrtc, &sDate, RTC_FORMAT_BIN);
 
   /* Format the time and date */
-  sprintf(timeString, "Time : %02d:%02d:%02d   Date : %02d/%02d/%02d", sTime.Hours, sTime.Minutes, sTime.Seconds, sDate.Date, sDate.Month, sDate.Year);
+  //used this sprintf for UART log
+  //sprintf(timeString, "Time : %02d:%02d:%02d   Date : %02d/%02d/%02d", sTime.Hours, sTime.Minutes, sTime.Seconds, sDate.Date, sDate.Month, sDate.Year);
+
+#ifdef I_2_C
+  	//used this sprintf for I2C log
+    sprintf(timeString,"%02d:%02d:%02d", sTime.Hours, sTime.Minutes, sTime.Seconds);
+#endif //#ifdef I_2_C
 }
 
 void setAlarm(void){
@@ -155,6 +167,7 @@ void watchdogFeed(void){
 	windowWatchdogInterruptFlag=0;
 }
 #endif //#ifdef W_W_D_G
+
 /* USER CODE END 0 */
 
 /**
@@ -188,10 +201,8 @@ int main(void)
   MX_USART2_UART_Init();
   MX_RTC_Init();
   //MX_IWDG_Init();
-#ifdef W_W_D_G
-  HAL_UART_Transmit(&huart2, (uint8_t *)"Window Watchdog is initialized\n", sizeof("Window Watchdog is initialized\n"), 1000);
-#endif //#ifdef W_W_D_G
-  MX_WWDG_Init();
+  //MX_WWDG_Init();
+  MX_I2C1_Init();
   /* USER CODE BEGIN 2 */
 #ifdef I_W_D_G
   HAL_UART_Transmit(&huart2, (uint8_t *)"Watchdog is initialized\n", sizeof("Watchdog is initialized\n"), 1000);
@@ -217,22 +228,25 @@ int main(void)
    uint32_t startTime = HAL_GetTick();
    uint32_t elapsedTime = 0;
 #endif //#ifdef I_W_D_G
+
+#ifdef I_2_C
+   SSD1306_Init();
+   SSD1306_Clear();
+
+   //To print name on a display
+//   SSD1306_GotoXY (0,0);
+//   SSD1306_Puts ("Shrey", &Font_11x18, 1);
+//   SSD1306_GotoXY (0, 30);
+//   SSD1306_Puts ("Bechara", &Font_11x18, 1);
+//   SSD1306_UpdateScreen();
+#endif //#ifdef I_2_C
   /* USER CODE END 2 */
+
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
     /* USER CODE END WHILE */
-#ifdef W_W_D_G
-	  HAL_Delay(5000);
-	  watchdogFeed();
-	  HAL_Delay(10000);
-	  watchdogFeed();
-	  HAL_Delay(10000);
-	  watchdogFeed();
-	  HAL_Delay(40000);
-	  watchdogFeed();
-#endif //#ifdef W_W_D_G
 
     /* USER CODE BEGIN 3 */
 #ifdef R_T_C
@@ -250,8 +264,13 @@ int main(void)
 //	      /* Print the timeS in Tera Term */
 	      HAL_UART_Transmit(&huart2, (uint8_t *)timeString, MAX_TIME_STRING_LENGTH, 1000);
 	      HAL_UART_Transmit(&huart2, (uint8_t *)"\n", sizeof("\n"), 1000);
-
 #endif //ifdef R_T_C
+
+#ifdef I_2_C
+	      SSD1306_Puts (timeString, &Font_11x18, 1);
+	      SSD1306_UpdateScreen();
+	      SSD1306_GotoXY (0,0);
+#endif //#ifdef I_2_C
 
 #ifdef I_W_D_G
 	      // Get the elapsed time since starting
@@ -270,6 +289,7 @@ int main(void)
 	        	  HAL_Delay(1000);
 	      }
 #endif //#ifdef I_W_D_G
+
   }
   /* USER CODE END 3 */
 }
@@ -319,6 +339,40 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
+}
+
+/**
+  * @brief I2C1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_I2C1_Init(void)
+{
+
+  /* USER CODE BEGIN I2C1_Init 0 */
+
+  /* USER CODE END I2C1_Init 0 */
+
+  /* USER CODE BEGIN I2C1_Init 1 */
+
+  /* USER CODE END I2C1_Init 1 */
+  hi2c1.Instance = I2C1;
+  hi2c1.Init.ClockSpeed = 400000;
+  hi2c1.Init.DutyCycle = I2C_DUTYCYCLE_2;
+  hi2c1.Init.OwnAddress1 = 0;
+  hi2c1.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
+  hi2c1.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
+  hi2c1.Init.OwnAddress2 = 0;
+  hi2c1.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
+  hi2c1.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
+  if (HAL_I2C_Init(&hi2c1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN I2C1_Init 2 */
+
+  /* USER CODE END I2C1_Init 2 */
+
 }
 
 /**
