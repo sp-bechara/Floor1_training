@@ -36,6 +36,7 @@
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
+#define windowWatchdogInterruptCount 600
 
 /* USER CODE END PM */
 
@@ -212,7 +213,7 @@ void WWDG_IRQHandler(void)
 #ifdef W_W_D_G
 	  HAL_WWDG_Refresh(&hwwdg);
 	  windowWatchdogInterruptFlag++;
-	  if(windowWatchdogInterruptFlag == 600){
+	  if(windowWatchdogInterruptFlag == windowWatchdogInterruptCount){
 	  		    		  HAL_Delay(49);
 	  		    	  }
 #endif //#ifdef W_W_D_G
