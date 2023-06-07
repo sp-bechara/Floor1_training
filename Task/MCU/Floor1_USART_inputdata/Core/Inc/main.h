@@ -74,7 +74,7 @@ void Error_Handler(void);
 
 /* USER CODE BEGIN Private defines */
 extern char RecievedData;
-extern int windowWatchdogInterruptFlag;
+extern volatile int windowWatchdogInterruptFlag;
 
 /* USER CODE END Private defines */
 
