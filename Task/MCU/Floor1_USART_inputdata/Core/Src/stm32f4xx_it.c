@@ -218,7 +218,6 @@ void WWDG_IRQHandler(void)
 	  		    	  }
 #endif //#ifdef W_W_D_G
   HAL_WWDG_IRQHandler(&hwwdg);
-
   /* USER CODE BEGIN WWDG_IRQn 1 */
 
   /* USER CODE END WWDG_IRQn 1 */
