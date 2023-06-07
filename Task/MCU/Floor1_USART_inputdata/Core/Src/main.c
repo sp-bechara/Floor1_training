@@ -23,9 +23,11 @@
 /* USER CODE BEGIN Includes */
 #include "stm32f4xx_hal_rtc.h"
 #include "stdio.h"
+#ifdef I_2_C
 #include "fonts.h"
 #include "ssd1306.h"
 #include "stm32f4xx_hal_i2c.h"
+#endif //#ifdef I_2_C
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
