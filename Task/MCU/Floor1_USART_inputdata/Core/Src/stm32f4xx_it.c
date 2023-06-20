@@ -57,6 +57,7 @@
 /* USER CODE END 0 */
 
 /* External variables --------------------------------------------------------*/
+extern ADC_HandleTypeDef hadc1;
 extern RTC_HandleTypeDef hrtc;
 extern UART_HandleTypeDef huart2;
 extern WWDG_HandleTypeDef hwwdg;
@@ -210,17 +211,24 @@ void WWDG_IRQHandler(void)
   /* USER CODE BEGIN WWDG_IRQn 0 */
 
   /* USER CODE END WWDG_IRQn 0 */
-#ifdef W_W_D_G
-	  HAL_WWDG_Refresh(&hwwdg);
-	  windowWatchdogInterruptFlag++;
-	  if(windowWatchdogInterruptFlag == windowWatchdogInterruptCount){
-	  		    		  HAL_Delay(49);
-	  		    	  }
-#endif //#ifdef W_W_D_G
   HAL_WWDG_IRQHandler(&hwwdg);
   /* USER CODE BEGIN WWDG_IRQn 1 */
 
   /* USER CODE END WWDG_IRQn 1 */
+}
+
+/**
+  * @brief This function handles ADC1 global interrupt.
+  */
+void ADC_IRQHandler(void)
+{
+  /* USER CODE BEGIN ADC_IRQn 0 */
+
+  /* USER CODE END ADC_IRQn 0 */
+  HAL_ADC_IRQHandler(&hadc1);
+  /* USER CODE BEGIN ADC_IRQn 1 */
+
+  /* USER CODE END ADC_IRQn 1 */
 }
 
 /**

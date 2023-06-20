@@ -45,9 +45,35 @@
 #ifdef R_T_C
 #define MAX_TIME_STRING_LENGTH 35  // Maximum length for time string (including null terminator)
 #endif //ifdef R_T_C
+
+#ifdef ADC_DMA
+#define VREFINT 1.21 //Internal reference voltage , V
+#define ADCMAX 4095.0 //(2^12)-1 ADC max value
+#define V25 0.76 //sensor voltage at 25 degree C
+#define AVG_SLOPE 0.0025 //2.5mV/degree C
+#define MAX_TEMPARETURE_LENGTH 22
+#endif //#ifdef ADC_DMA
+
+#ifdef ADC_POLL
+#define ADCMAX 4095.0 //(2^12)-1 ADC max value
+#define V25 0.76 //sensor voltage at 25 degree C
+#define AVG_SLOPE 0.0025 //2.5mV/degree C
+#define MAX_TEMPARETURE_LENGTH 22
+#define VrefInt 3.3
+#endif //#ifdef ADC_POLL
+
+#ifdef ADC_IT
+#define ADCMAX 4095.0 //(2^12)-1 ADC max value
+#define V25 0.76 //sensor voltage at 25 degree C
+#define AVG_SLOPE 0.0025 //2.5mV/degree C
+#define MAX_TEMPARETURE_LENGTH 22
+#define VrefInt 3.3
+#endif //#ifdef ADC_IT
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+ADC_HandleTypeDef hadc1;
+
 I2C_HandleTypeDef hi2c1;
 
 IWDG_HandleTypeDef hiwdg;
@@ -87,6 +113,26 @@ uint32_t prescalerIndex=0;
 #ifdef W_W_D_G
 volatile int windowWatchdogInterruptFlag=0;
 #endif //#ifdef W_W_D_G
+
+#ifdef ADC_DMA
+uint16_t adcRaw[2];
+uint8_t adcConvCmplt = 0;
+double temperature;
+char tempBuffer[MAX_TEMPARETURE_LENGTH];
+#endif //#ifdef ADC_DMA
+
+#ifdef ADC_POLL
+double temperature;
+char tempBuffer[MAX_TEMPARETURE_LENGTH];
+uint32_t adcVal;
+#endif //#ifdef ADC_POLL
+
+#ifdef ADC_IT
+double temperature;
+char tempBuffer[MAX_TEMPARETURE_LENGTH];
+uint32_t adcVal;
+int adcInterruptCheckFlag=0;
+#endif //#ifdef ADC_IT
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -97,6 +143,7 @@ static void MX_RTC_Init(void);
 static void MX_IWDG_Init(void);
 static void MX_WWDG_Init(void);
 static void MX_I2C1_Init(void);
+static void MX_ADC1_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -169,7 +216,6 @@ void watchdogFeed(void){
 	windowWatchdogInterruptFlag=0;
 }
 #endif //#ifdef W_W_D_G
-
 /* USER CODE END 0 */
 
 /**
@@ -205,6 +251,7 @@ int main(void)
   //MX_IWDG_Init();
   //MX_WWDG_Init();
   MX_I2C1_Init();
+  MX_ADC1_Init();
   /* USER CODE BEGIN 2 */
 #ifdef I_W_D_G
   HAL_UART_Transmit(&huart2, (uint8_t *)"Watchdog is initialized\n", sizeof("Watchdog is initialized\n"), 1000);
@@ -242,6 +289,15 @@ int main(void)
 //   SSD1306_Puts ("Bechara", &Font_11x18, 1);
 //   SSD1306_UpdateScreen();
 #endif //#ifdef I_2_C
+
+#ifdef ADC_DMA
+   HAL_ADC_Start_DMA(&hadc1, (uint32_t *)adcRaw, 2);
+   HAL_TIM_Base_Start(&htim3);
+#endif //#ifdef ADC_DMA
+
+#ifdef ADC_IT
+   HAL_ADC_Start_IT(&hadc1);
+#endif //#ifdef ADC_IT
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -269,9 +325,9 @@ int main(void)
 #endif //ifdef R_T_C
 
 #ifdef I_2_C
-	      SSD1306_Puts (timeString, &Font_11x18, 1);
-	      SSD1306_UpdateScreen();
-	      SSD1306_GotoXY (0,0);
+//	      SSD1306_Puts (timeString, &Font_11x18, 1);
+//	      SSD1306_UpdateScreen();
+//	      SSD1306_GotoXY (0,0);
 #endif //#ifdef I_2_C
 
 #ifdef I_W_D_G
@@ -292,6 +348,45 @@ int main(void)
 	      }
 #endif //#ifdef I_W_D_G
 
+#ifdef ADC_DMA
+	          if(adcConvCmplt){
+	        	  //Something do
+	        	  double VrefInt = (VREFINT * ADCMAX)/adcRaw[0]; //it will give real supply voltage in microcontroller
+	        	  double VTmpSens = (VrefInt*adcRaw[1])/ADCMAX; //it is used to check whether internal temp is running proper or not i.e. If its proper it's value will be similar to 0.76(sensor voltage at 25 degree C)
+	        	  temperature = (VTmpSens - V25)/(AVG_SLOPE) + 25.0;
+	        	  sprintf(tempBuffer,"%0.2lf", temperature);
+	        	  HAL_UART_Transmit(&huart2, (uint8_t *)tempBuffer, strlen(tempBuffer), 1000);
+	    	      HAL_UART_Transmit(&huart2, (uint8_t *)"\n", sizeof("\n"), 1000);
+	    	      SSD1306_GotoXY (0,0);
+	    	      SSD1306_Puts (tempBuffer, &Font_11x18, 1);
+	    	      SSD1306_UpdateScreen();
+	        	  adcConvCmplt=0;
+	        	  HAL_Delay(1000);
+	          }
+#endif //#ifdef ADC_DMA
+
+#ifdef ADC_POLL
+	     HAL_ADC_Start(&hadc1);
+	     HAL_ADC_PollForConversion(&hadc1, 100);
+	     adcVal=HAL_ADC_GetValue(&hadc1);
+	     HAL_ADC_Stop(&hadc1);
+	     double VTmpSens = (VrefInt*adcVal)/ADCMAX; //it is used to check whether internal temp is running proper or not i.e. If its proper it's value will be similar to 0.76(sensor voltage at 25 degree C)
+	     temperature = (VTmpSens - V25)/(AVG_SLOPE) + 25.0;
+	     sprintf(tempBuffer,"%0.2lf", temperature);
+	     HAL_UART_Transmit(&huart2, (uint8_t *)tempBuffer, strlen(tempBuffer), 1000);
+	     HAL_UART_Transmit(&huart2, (uint8_t *)"\n", sizeof("\n"), 1000);
+	     HAL_Delay(1000);
+#endif //#ifdef ADC_POLL
+
+#ifdef ADC_IT
+	     if(adcInterruptCheckFlag){
+	    	    sprintf(tempBuffer,"%0.2lf", temperature);
+	    	    HAL_UART_Transmit(&huart2, (uint8_t *)tempBuffer, strlen(tempBuffer), 1000);
+	    	    HAL_UART_Transmit(&huart2, (uint8_t *)"\n", sizeof("\n"), 1000);
+	    	    adcInterruptCheckFlag=0;
+	    	    HAL_Delay(1000);
+	     }
+#endif //#ifdef ADC_IT
   }
   /* USER CODE END 3 */
 }
@@ -320,8 +415,8 @@ void SystemClock_Config(void)
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
   RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI;
   RCC_OscInitStruct.PLL.PLLM = 16;
-  RCC_OscInitStruct.PLL.PLLN = 336;
-  RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV4;
+  RCC_OscInitStruct.PLL.PLLN = 168;
+  RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
   RCC_OscInitStruct.PLL.PLLQ = 7;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
@@ -344,6 +439,71 @@ void SystemClock_Config(void)
 }
 
 /**
+  * @brief ADC1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_ADC1_Init(void)
+{
+
+  /* USER CODE BEGIN ADC1_Init 0 */
+
+  /* USER CODE END ADC1_Init 0 */
+
+  ADC_AnalogWDGConfTypeDef AnalogWDGConfig = {0};
+  ADC_ChannelConfTypeDef sConfig = {0};
+
+  /* USER CODE BEGIN ADC1_Init 1 */
+
+  /* USER CODE END ADC1_Init 1 */
+
+  /** Configure the global features of the ADC (Clock, Resolution, Data Alignment and number of conversion)
+  */
+  hadc1.Instance = ADC1;
+  hadc1.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV4;
+  hadc1.Init.Resolution = ADC_RESOLUTION_12B;
+  hadc1.Init.ScanConvMode = DISABLE;
+  hadc1.Init.ContinuousConvMode = ENABLE;
+  hadc1.Init.DiscontinuousConvMode = DISABLE;
+  hadc1.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
+  hadc1.Init.ExternalTrigConv = ADC_SOFTWARE_START;
+  hadc1.Init.DataAlign = ADC_DATAALIGN_RIGHT;
+  hadc1.Init.NbrOfConversion = 1;
+  hadc1.Init.DMAContinuousRequests = DISABLE;
+  hadc1.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
+  if (HAL_ADC_Init(&hadc1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure the analog watchdog
+  */
+  AnalogWDGConfig.WatchdogMode = ADC_ANALOGWATCHDOG_SINGLE_REG;
+  AnalogWDGConfig.HighThreshold = 0;
+  AnalogWDGConfig.LowThreshold = 0;
+  AnalogWDGConfig.Channel = ADC_CHANNEL_TEMPSENSOR;
+  AnalogWDGConfig.ITMode = DISABLE;
+  if (HAL_ADC_AnalogWDGConfig(&hadc1, &AnalogWDGConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure for the selected ADC regular channel its corresponding rank in the sequencer and its sample time.
+  */
+  sConfig.Channel = ADC_CHANNEL_TEMPSENSOR;
+  sConfig.Rank = 1;
+  sConfig.SamplingTime = ADC_SAMPLETIME_480CYCLES;
+  if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN ADC1_Init 2 */
+
+  /* USER CODE END ADC1_Init 2 */
+
+}
+
+/**
   * @brief I2C1 Initialization Function
   * @param None
   * @retval None
@@ -359,7 +519,7 @@ static void MX_I2C1_Init(void)
 
   /* USER CODE END I2C1_Init 1 */
   hi2c1.Instance = I2C1;
-  hi2c1.Init.ClockSpeed = 400000;
+  hi2c1.Init.ClockSpeed = 100000;
   hi2c1.Init.DutyCycle = I2C_DUTYCYCLE_2;
   hi2c1.Init.OwnAddress1 = 0;
   hi2c1.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
@@ -605,6 +765,25 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+#ifdef ADC_DMA
+void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
+{
+	//Below condition is used to know that from which ADC, interrupt is come
+	if(hadc->Instance == ADC1){
+		adcConvCmplt=255;
+	}
+}
+#endif //#ifdef ADC_DMA
+
+#ifdef ADC_IT
+void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
+{
+    adcVal=HAL_ADC_GetValue(&hadc1);
+    double VTmpSens = (VrefInt*adcVal)/ADCMAX; //it is used to check whether internal temp is running proper or not i.e. If its proper it's value will be similar to 0.76(sensor voltage at 25 degree C)
+    temperature = (VTmpSens - V25)/(AVG_SLOPE) + 25.0;
+    adcInterruptCheckFlag++;
+}
+#endif //#ifdef ADC_IT
 
 /* USER CODE END 4 */
 
