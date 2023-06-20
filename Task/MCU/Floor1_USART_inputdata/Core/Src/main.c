@@ -452,7 +452,7 @@ int main(void)
 
 	 // Buffer to Main Memory Page Program with Built-In Erase(at Page 0)
 	 HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
-	 uint8_t memoryPageTx[4] = {0x83, 0x00, 0x00, 0x00};
+	 uint8_t memoryPageTx[4] = {0x83, 0x04, 0xE8, 0x00};//stored in block 157 and page 1256.
 	 HAL_SPI_Transmit(&hspi1, memoryPageTx, 4, 1000);
 	 HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
 
@@ -460,7 +460,7 @@ int main(void)
 
 	 // Main Memory Page Read(from Page 0)
 	 HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
-	 uint8_t memoryPageReadTx[264] = {0xD2, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+	 uint8_t memoryPageReadTx[264] = {0xD2, 0x04, 0xE8, 0x00, 0x00, 0x00, 0x00, 0x00};
 	 HAL_SPI_TransmitReceive(&hspi1, memoryPageReadTx, memoryPageReadRx, 264, 1000);
 	 HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
 #endif //#ifdef SPI
