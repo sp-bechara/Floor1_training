@@ -69,6 +69,10 @@
 #define MAX_TEMPARETURE_LENGTH 22
 #define VrefInt 3.3
 #endif //#ifdef ADC_IT
+
+#ifdef SPI
+#define BIT_NUMBER 7
+#endif //#ifdef SPI
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
@@ -79,6 +83,8 @@ I2C_HandleTypeDef hi2c1;
 IWDG_HandleTypeDef hiwdg;
 
 RTC_HandleTypeDef hrtc;
+
+SPI_HandleTypeDef hspi1;
 
 UART_HandleTypeDef huart2;
 
@@ -133,6 +139,17 @@ char tempBuffer[MAX_TEMPARETURE_LENGTH];
 uint32_t adcVal;
 int adcInterruptCheckFlag=0;
 #endif //#ifdef ADC_IT
+
+#ifdef SPI
+uint8_t rx_buffer[2] = {0, 0};
+uint8_t tx_buffer[2] = {0xD7, 0};
+uint8_t DeviceIDRxBuffer[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+uint8_t DeviceIDTxBuffer[8] = {0x9F, 0, 0, 0, 0, 0, 0};
+// Data to be transferred
+uint8_t data[256];
+uint8_t readRx[261];
+uint8_t memoryPageReadRx[264];
+#endif //#ifdef SPI
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -144,6 +161,7 @@ static void MX_IWDG_Init(void);
 static void MX_WWDG_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_ADC1_Init(void);
+static void MX_SPI1_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -247,11 +265,12 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_USART2_UART_Init();
-  MX_RTC_Init();
+  //MX_RTC_Init();
   //MX_IWDG_Init();
   //MX_WWDG_Init();
-  MX_I2C1_Init();
-  MX_ADC1_Init();
+  //MX_I2C1_Init();
+  //MX_ADC1_Init();
+  MX_SPI1_Init();
   /* USER CODE BEGIN 2 */
 #ifdef I_W_D_G
   HAL_UART_Transmit(&huart2, (uint8_t *)"Watchdog is initialized\n", sizeof("Watchdog is initialized\n"), 1000);
@@ -298,6 +317,7 @@ int main(void)
 #ifdef ADC_IT
    HAL_ADC_Start_IT(&hadc1);
 #endif //#ifdef ADC_IT
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -387,7 +407,63 @@ int main(void)
 	    	    HAL_Delay(1000);
 	     }
 #endif //#ifdef ADC_IT
+
+#ifdef SPI
+	     HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
+	     HAL_SPI_TransmitReceive(&hspi1, tx_buffer, rx_buffer, 2, 1000);
+	     HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
+	     if(((rx_buffer[0]>>BIT_NUMBER) & 1)==1){
+	    	 HAL_UART_Transmit(&huart2, (uint8_t *)"Device is ready\n", sizeof("Device is ready\n"), 1000);
+	    	 break;
+	     }
+	     else
+	     {
+	    	 HAL_Delay(10);
+	     }
+#endif //#ifdef SPI
   }
+#ifdef SPI
+  	 //To read the DeviceID, manufacturer details.
+	 HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
+	 HAL_SPI_TransmitReceive(&hspi1, DeviceIDTxBuffer, DeviceIDRxBuffer, 5, 1000);
+	 HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
+
+
+	 // Transfer data to Buffer 1
+	 for (uint16_t dataInput = 0; dataInput <= 255; dataInput++) {
+	     data[dataInput] = (uint8_t)dataInput;
+	 }
+
+	 HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
+	 uint8_t commandTx[4] = {0x84, 0x00, 0x00, 0x00};
+	 HAL_SPI_Transmit(&hspi1, commandTx, sizeof(commandTx), HAL_MAX_DELAY);
+	 HAL_SPI_Transmit(&hspi1, (uint8_t*)data, sizeof(data), HAL_MAX_DELAY);
+	 HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
+
+	 HAL_Delay(1000);
+
+	 // Read data from buffer
+	 HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
+	 uint8_t readTx[261] = {0xD4, 0x00, 0x00, 0x00, 0x00};
+	 HAL_SPI_TransmitReceive(&hspi1, readTx, readRx, 261, 1000);
+	 HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
+
+	 HAL_Delay(1000);
+
+	 // Buffer to Main Memory Page Program with Built-In Erase(at Page 0)
+	 HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
+	 uint8_t memoryPageTx[4] = {0x83, 0x00, 0x00, 0x00};
+	 HAL_SPI_Transmit(&hspi1, memoryPageTx, 4, 1000);
+	 HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
+
+	 HAL_Delay(1000);
+
+	 // Main Memory Page Read(from Page 0)
+	 HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
+	 uint8_t memoryPageReadTx[264] = {0xD2, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+	 HAL_SPI_TransmitReceive(&hspi1, memoryPageReadTx, memoryPageReadRx, 264, 1000);
+	 HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
+#endif //#ifdef SPI
   /* USER CODE END 3 */
 }
 
@@ -659,6 +735,44 @@ static void MX_RTC_Init(void)
 }
 
 /**
+  * @brief SPI1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_SPI1_Init(void)
+{
+
+  /* USER CODE BEGIN SPI1_Init 0 */
+
+  /* USER CODE END SPI1_Init 0 */
+
+  /* USER CODE BEGIN SPI1_Init 1 */
+
+  /* USER CODE END SPI1_Init 1 */
+  /* SPI1 parameter configuration*/
+  hspi1.Instance = SPI1;
+  hspi1.Init.Mode = SPI_MODE_MASTER;
+  hspi1.Init.Direction = SPI_DIRECTION_2LINES;
+  hspi1.Init.DataSize = SPI_DATASIZE_8BIT;
+  hspi1.Init.CLKPolarity = SPI_POLARITY_LOW;
+  hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
+  hspi1.Init.NSS = SPI_NSS_HARD_OUTPUT;
+  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_2;
+  hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
+  hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
+  hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
+  hspi1.Init.CRCPolynomial = 10;
+  if (HAL_SPI_Init(&hspi1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN SPI1_Init 2 */
+
+  /* USER CODE END SPI1_Init 2 */
+
+}
+
+/**
   * @brief USART2 Initialization Function
   * @param None
   * @retval None
@@ -743,22 +857,12 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(B1_GPIO_Port, B1_Pin, GPIO_PIN_RESET);
 
-  /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);
-
   /*Configure GPIO pin : B1_Pin */
   GPIO_InitStruct.Pin = B1_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(B1_GPIO_Port, &GPIO_InitStruct);
-
-  /*Configure GPIO pin : LD2_Pin */
-  GPIO_InitStruct.Pin = LD2_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(LD2_GPIO_Port, &GPIO_InitStruct);
 
 /* USER CODE BEGIN MX_GPIO_Init_2 */
 /* USER CODE END MX_GPIO_Init_2 */
