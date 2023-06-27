@@ -28,6 +28,10 @@
 #include "ssd1306.h"
 #include "stm32f4xx_hal_i2c.h"
 #endif //#ifdef I_2_C
+
+#ifdef SPI
+#include <string.h>
+#endif //#ifdef SPI
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -72,6 +76,12 @@
 
 #ifdef SPI
 #define BIT_NUMBER 7
+#define POSITION_OF_BITS 9
+#define POSITION_OF_BITS_FOR_BYTES_ADDRESS 0
+#define NO_OF_BITS_TO_BE_EXTRACTED 8
+#define NO_OF_BITS_TO_BE_EXTRACTED_FOR_BYTES_ADDRESS 8
+#define PAGE_SIZE 256
+#define BUFFER_SIZE 512
 #endif //#ifdef SPI
 /* USER CODE END PM */
 
@@ -141,14 +151,10 @@ int adcInterruptCheckFlag=0;
 #endif //#ifdef ADC_IT
 
 #ifdef SPI
-uint8_t rx_buffer[2] = {0, 0};
-uint8_t tx_buffer[2] = {0xD7, 0};
-uint8_t DeviceIDRxBuffer[8] = {0, 0, 0, 0, 0, 0, 0, 0};
-uint8_t DeviceIDTxBuffer[8] = {0x9F, 0, 0, 0, 0, 0, 0};
-// Data to be transferred
-uint8_t data[256];
-uint8_t readRx[261];
-uint8_t memoryPageReadRx[264];
+//uint8_t readRx[261];
+uint8_t memoryPageReadRx[262];
+uint8_t buffer[BUFFER_SIZE];
+uint8_t userBuffer[BUFFER_SIZE];
 #endif //#ifdef SPI
 /* USER CODE END PV */
 
@@ -234,6 +240,103 @@ void watchdogFeed(void){
 	windowWatchdogInterruptFlag=0;
 }
 #endif //#ifdef W_W_D_G
+
+#ifdef SPI
+void spiChipSelect(){
+    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
+}
+
+void spiChipDeselect(){
+    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
+}
+
+int deviceReady(){
+	while(1){
+		uint8_t rx_buffer[3] = {0, 0, 0};
+		uint8_t tx_buffer[3] = {0xD7};
+		spiChipSelect();
+		HAL_SPI_TransmitReceive(&hspi1, tx_buffer, rx_buffer, 3, 1000);
+		spiChipDeselect();
+		if(((rx_buffer[1]>>BIT_NUMBER) & 1)==1){
+			HAL_UART_Transmit(&huart2, (uint8_t *)"Device is ready\n", sizeof("Device is ready\n"), 1000);
+			return 1;
+			break;
+		}
+	}
+}
+
+void memoryWrite(uint32_t address, uint8_t* buffer, int noOfBytes)
+{
+    uint8_t commandTx[4] = {0x00};
+    while (noOfBytes > 0) {
+
+        // Transmit to the buffer
+        commandTx[0]=0x84;
+        commandTx[1]=0x00;
+        commandTx[2]=0x00;
+        commandTx[3]=0x00;
+
+        spiChipSelect();
+        HAL_SPI_Transmit(&hspi1, commandTx, sizeof(commandTx), HAL_MAX_DELAY);
+        HAL_SPI_Transmit(&hspi1, buffer, (noOfBytes > 256) ? 256 : noOfBytes, HAL_MAX_DELAY);
+        spiChipDeselect();
+
+        //Condition to check whether device is ready or not
+        deviceReady();
+
+        //Read data from buffer
+//		HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
+//        uint8_t readTx[261] = {0xD4, 0x00, 0x00, 0x00, 0x00};
+//        HAL_SPI_TransmitReceive(&hspi1, readTx, readRx, 261, 1000);
+//        HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
+
+        //Buffer to Main Memory Page Program with Built-In Erase(at Page 0)
+        spiChipSelect();
+        commandTx[0]=0x83;
+        commandTx[1] = address >> 16;
+        commandTx[2] = (address>>(POSITION_OF_BITS-1)) & ((1<<NO_OF_BITS_TO_BE_EXTRACTED)-1);
+        HAL_SPI_Transmit(&hspi1, commandTx, sizeof(commandTx), 1000);
+        spiChipDeselect();
+
+        // Update the variables
+        noOfBytes -= PAGE_SIZE;
+        buffer += PAGE_SIZE;
+        address += PAGE_SIZE;
+
+        //Condition to check whether device is ready or not
+        deviceReady();
+    }
+}
+
+void memoryRead(uint32_t address, uint8_t* userBuffer, int readRange)
+{
+    int userBufferInput=0;
+    int readRangeCheck=(readRange > 256) ? 261 :readRange;
+    uint8_t memoryPageReadTx[262] = {0x1B, address >> 16, (address >> (POSITION_OF_BITS - 1)) & ((1 << NO_OF_BITS_TO_BE_EXTRACTED) - 1), (address >> (POSITION_OF_BITS_FOR_BYTES_ADDRESS - 1)) & ((1 << NO_OF_BITS_TO_BE_EXTRACTED_FOR_BYTES_ADDRESS) - 1), 0x00, 0x00};
+
+    while (readRangeCheck > 0) {
+        spiChipSelect();
+        memoryPageReadTx[1] = address >> 16;
+        memoryPageReadTx[2] = (address>>(POSITION_OF_BITS-1)) & ((1<<NO_OF_BITS_TO_BE_EXTRACTED)-1);
+        memoryPageReadTx[3] = (address >> (POSITION_OF_BITS_FOR_BYTES_ADDRESS - 1)) & ((1 << NO_OF_BITS_TO_BE_EXTRACTED_FOR_BYTES_ADDRESS) - 1);
+        HAL_SPI_TransmitReceive(&hspi1, memoryPageReadTx, memoryPageReadRx, PAGE_SIZE+6, 1000);
+        spiChipDeselect();
+        readRangeCheck=(readRange >= 256) ? 261 :readRange+7;
+        for (int memoryPageReadRxInput = 7; memoryPageReadRxInput <= readRangeCheck; memoryPageReadRxInput++, userBufferInput++) {
+        	userBuffer[userBufferInput] = memoryPageReadRx[memoryPageReadRxInput];
+           }
+
+        // Update the variables
+        readRangeCheck -= PAGE_SIZE;
+        readRange -= PAGE_SIZE;
+        address += PAGE_SIZE;
+        userBufferInput++;
+
+        // Initialize buffer to zero
+        bzero(memoryPageReadRx, sizeof(memoryPageReadRx));
+    }
+}
+#endif //#ifdef SPI
 /* USER CODE END 0 */
 
 /**
@@ -337,7 +440,7 @@ int main(void)
 	  	  	  HAL_Delay(1000);
 //
 	  	      /* Get the current time from the RTC */
-	  	  	  getCurrentTime();
+	 	  	  getCurrentTime();
 //
 //	      /* Print the timeS in Tera Term */
 	      HAL_UART_Transmit(&huart2, (uint8_t *)timeString, MAX_TIME_STRING_LENGTH, 1000);
@@ -409,60 +512,45 @@ int main(void)
 #endif //#ifdef ADC_IT
 
 #ifdef SPI
-	     HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
-	     HAL_SPI_TransmitReceive(&hspi1, tx_buffer, rx_buffer, 2, 1000);
-	     HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
-	     if(((rx_buffer[0]>>BIT_NUMBER) & 1)==1){
-	    	 HAL_UART_Transmit(&huart2, (uint8_t *)"Device is ready\n", sizeof("Device is ready\n"), 1000);
+	     if(deviceReady()==1){
 	    	 break;
 	     }
 	     else
-	     {
-	    	 HAL_Delay(10);
-	     }
+			{
+			   HAL_Delay(10);
+			}
 #endif //#ifdef SPI
   }
 #ifdef SPI
   	 //To read the DeviceID, manufacturer details.
-	 HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
-	 HAL_SPI_TransmitReceive(&hspi1, DeviceIDTxBuffer, DeviceIDRxBuffer, 5, 1000);
-	 HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
+  	 uint8_t DeviceIDRxBuffer[6] = {0, 0, 0, 0, 0, 0};
+  	 uint8_t DeviceIDTxBuffer[6] = {0x9F, 0, 0, 0, 0, 0};
+  	 spiChipSelect();
+	 HAL_SPI_TransmitReceive(&hspi1, DeviceIDTxBuffer, DeviceIDRxBuffer, 6, 1000);
+	 spiChipDeselect();
 
-
-	 // Transfer data to Buffer 1
-	 for (uint16_t dataInput = 0; dataInput <= 255; dataInput++) {
-	     data[dataInput] = (uint8_t)dataInput;
-	 }
-
-	 HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
-	 uint8_t commandTx[4] = {0x84, 0x00, 0x00, 0x00};
-	 HAL_SPI_Transmit(&hspi1, commandTx, sizeof(commandTx), HAL_MAX_DELAY);
-	 HAL_SPI_Transmit(&hspi1, (uint8_t*)data, sizeof(data), HAL_MAX_DELAY);
-	 HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
-
-	 HAL_Delay(1000);
-
-	 // Read data from buffer
-	 HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
-	 uint8_t readTx[261] = {0xD4, 0x00, 0x00, 0x00, 0x00};
-	 HAL_SPI_TransmitReceive(&hspi1, readTx, readRx, 261, 1000);
-	 HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
-
-	 HAL_Delay(1000);
-
-	 // Buffer to Main Memory Page Program with Built-In Erase(at Page 0)
-	 HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
-	 uint8_t memoryPageTx[4] = {0x83, 0x04, 0xE8, 0x00};//stored in block 157 and page 1256.
-	 HAL_SPI_Transmit(&hspi1, memoryPageTx, 4, 1000);
-	 HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
-
-	 HAL_Delay(1000);
-
-	 // Main Memory Page Read(from Page 0)
-	 HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
-	 uint8_t memoryPageReadTx[264] = {0xD2, 0x04, 0xE8, 0x00, 0x00, 0x00, 0x00, 0x00};
-	 HAL_SPI_TransmitReceive(&hspi1, memoryPageReadTx, memoryPageReadRx, 264, 1000);
-	 HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
+	 //Filling the "buffer" and its size is BUFFER_SIZE
+	 for (uint16_t bufferInput = 0; bufferInput < BUFFER_SIZE; bufferInput++) {
+	         if (bufferInput <= 255) {
+	             buffer[bufferInput] = (uint8_t)bufferInput;
+	         } else {
+	             buffer[bufferInput] = (uint8_t)(255 - (bufferInput - 256));
+	         }
+	     }
+	 /* the parameter of memoryWrite is
+	  para1 - Address of mainMemory, on which you want to write the buffer
+	  para2 - Pass the "buffer" i.e. content you want to write to mainMemory
+	  para3 - From para2 how much you want to write i.e. no of bytes
+	  */
+	 memoryWrite(3583, buffer, 512);
+	 /* the parameter of memoryRead and its size is SIZE
+	  para1 - Address of mainMemory, from which you want to start to read
+	  para2 - Pass the "userBuffer" i.e. content you want to read from mainMemory will be stored in this buffer
+	  para3 - how much bytes you want to read
+	  */
+	 memoryRead(3583, userBuffer, 400);
+while(1){
+}
 #endif //#ifdef SPI
   /* USER CODE END 3 */
 }
