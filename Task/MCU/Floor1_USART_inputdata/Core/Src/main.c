@@ -28,6 +28,10 @@
 #include "ssd1306.h"
 #include "stm32f4xx_hal_i2c.h"
 #endif //#ifdef I_2_C
+
+#ifdef SPI
+#include <string.h>
+#endif //#ifdef SPI
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -69,6 +73,26 @@
 #define MAX_TEMPARETURE_LENGTH 22
 #define VrefInt 3.3
 #endif //#ifdef ADC_IT
+
+#ifdef SPI
+#define BIT_NUMBER 7
+#define POSITION_OF_BITS 9
+#define POSITION_OF_BITS_FOR_BYTES_ADDRESS 0
+#define NO_OF_BITS_TO_BE_EXTRACTED 8
+#define NO_OF_BITS_TO_BE_EXTRACTED_FOR_BYTES_ADDRESS 8
+#define PAGE_SIZE 256
+#define BUFFER_SIZE 512
+#define DEBUG_SPI_FLASH_CHIP_AT45DB081E 0
+#define MEMORY_PAGE_READ_TX_SIZE 6
+#define MEMORY_WRITE_ADDRESS 3583
+#if (MEMORY_WRITE_ADDRESS < 0 || MEMORY_WRITE_ADDRESS > 4350)
+    #error Invalid MEMORY_WRITE_ADDRESS value. It must be within the range of 0 to 4350.
+#endif
+#define MEMORY_READ_ADDRESS 3583
+#if (MEMORY_READ_ADDRESS < 0 || MEMORY_READ_ADDRESS > 4350)
+    #error Invalid MEMORY_READ_ADDRESS value. It must be within the range of 0 to 4350.
+#endif
+#endif //#ifdef SPI
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
@@ -79,6 +103,8 @@ I2C_HandleTypeDef hi2c1;
 IWDG_HandleTypeDef hiwdg;
 
 RTC_HandleTypeDef hrtc;
+
+SPI_HandleTypeDef hspi1;
 
 UART_HandleTypeDef huart2;
 
@@ -133,6 +159,15 @@ char tempBuffer[MAX_TEMPARETURE_LENGTH];
 uint32_t adcVal;
 int adcInterruptCheckFlag=0;
 #endif //#ifdef ADC_IT
+
+#ifdef SPI
+#if DEBUG_SPI_FLASH_CHIP_AT45DB081E
+uint8_t readRx[261];
+#endif //#if DEBUG_SPI_FLASH_CHIP_AT45DB081E
+uint8_t memoryPageReadRx[262];
+uint8_t buffer[BUFFER_SIZE];
+uint8_t userBuffer[BUFFER_SIZE];
+#endif //#ifdef SPI
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -144,6 +179,7 @@ static void MX_IWDG_Init(void);
 static void MX_WWDG_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_ADC1_Init(void);
+static void MX_SPI1_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -216,6 +252,108 @@ void watchdogFeed(void){
 	windowWatchdogInterruptFlag=0;
 }
 #endif //#ifdef W_W_D_G
+
+#ifdef SPI
+void spiChipSelect(){
+    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
+}
+
+void spiChipDeselect(){
+    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
+}
+
+void isDeviceReadyAT45DB081E(){
+	while(1){
+		uint8_t rx_buffer[3] = {0, 0, 0};
+		uint8_t tx_buffer[3] = {0xD7};
+		spiChipSelect();
+		HAL_SPI_TransmitReceive(&hspi1, tx_buffer, rx_buffer, 3, 1000);
+		spiChipDeselect();
+		if(((rx_buffer[1]>>BIT_NUMBER) & 1)==1){
+#if DEBUG_SPI_FLASH_CHIP_AT45DB081E
+			HAL_UART_Transmit(&huart2, (uint8_t *)"Device is ready\n", sizeof("Device is ready\n"), 1000);
+#endif //#if DEBUG_SPI_FLASH_CHIP_AT45DB081E
+			break;
+		}
+	}
+}
+
+void flashMemoryWriteAT45DB081E(uint32_t address, uint8_t* buffer, int noOfBytes)
+{
+    uint8_t commandTx[4] = {0x00};
+
+    while (noOfBytes > 0) {
+
+    	//Condition to check whether device is ready or not
+    	isDeviceReadyAT45DB081E();
+
+        // Transmit to the buffer
+        commandTx[0]=0x84;
+        commandTx[1]=0x00;
+        commandTx[2]=0x00;
+        commandTx[3]=0x00;
+        spiChipSelect();
+        HAL_SPI_Transmit(&hspi1, commandTx, sizeof(commandTx), HAL_MAX_DELAY);
+        HAL_SPI_Transmit(&hspi1, buffer, (noOfBytes > PAGE_SIZE) ? PAGE_SIZE : noOfBytes, HAL_MAX_DELAY);
+        spiChipDeselect();
+
+        //Condition to check whether device is ready or not
+        isDeviceReadyAT45DB081E();
+
+#if DEBUG_SPI_FLASH_CHIP_AT45DB081E
+        //Read data from buffer
+		HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
+        uint8_t readTx[261] = {0xD4, 0x00, 0x00, 0x00, 0x00};
+        HAL_SPI_TransmitReceive(&hspi1, readTx, readRx, 261, 1000);
+        HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
+#endif //#if DEBUG_SPI_FLASH_CHIP_AT45DB081E
+
+        //Buffer to Main Memory Page Program with Built-In Erase(at Page 0)
+        commandTx[0] = 0x83;
+        commandTx[1] = address >> 16;
+        commandTx[2] = (address>>(POSITION_OF_BITS-1)) & ((1<<NO_OF_BITS_TO_BE_EXTRACTED)-1);
+        spiChipSelect();
+        HAL_SPI_Transmit(&hspi1, commandTx, sizeof(commandTx), 1000);
+        spiChipDeselect();
+
+        // Update the variables
+        noOfBytes -= PAGE_SIZE;
+        buffer += PAGE_SIZE;
+        address += PAGE_SIZE;
+    }
+	//Condition to check whether device is ready or not
+	isDeviceReadyAT45DB081E();
+}
+
+void flashMemoryReadAT45DB081E(uint32_t address, uint8_t* userBuffer, int readRange)
+{
+    int userBufferInput=0;
+    int readRangeCheck=(readRange >= PAGE_SIZE) ? PAGE_SIZE+(MEMORY_PAGE_READ_TX_SIZE-1):readRange+7;
+    uint8_t memoryPageReadTx[262] = {0x1B, address >> 16, (address >> (POSITION_OF_BITS - 1)) & ((1 << NO_OF_BITS_TO_BE_EXTRACTED) - 1), (address >> (POSITION_OF_BITS_FOR_BYTES_ADDRESS - 1)) & ((1 << NO_OF_BITS_TO_BE_EXTRACTED_FOR_BYTES_ADDRESS) - 1), 0x00, 0x00};
+
+    while (readRangeCheck > 0) {
+        spiChipSelect();
+        memoryPageReadTx[1] = address >> 16;
+        memoryPageReadTx[2] = (address>>(POSITION_OF_BITS-1)) & ((1<<NO_OF_BITS_TO_BE_EXTRACTED)-1);
+        memoryPageReadTx[3] = (address >> (POSITION_OF_BITS_FOR_BYTES_ADDRESS - 1)) & ((1 << NO_OF_BITS_TO_BE_EXTRACTED_FOR_BYTES_ADDRESS) - 1);
+        HAL_SPI_TransmitReceive(&hspi1, memoryPageReadTx, memoryPageReadRx, PAGE_SIZE+MEMORY_PAGE_READ_TX_SIZE, 1000);
+        spiChipDeselect();
+        readRangeCheck=(readRange >= PAGE_SIZE) ? PAGE_SIZE+(MEMORY_PAGE_READ_TX_SIZE-1)/*261*/ :readRange+7;
+        for (int memoryPageReadRxInput = 7; memoryPageReadRxInput <= readRangeCheck; memoryPageReadRxInput++, userBufferInput++) {
+        	userBuffer[userBufferInput] = memoryPageReadRx[memoryPageReadRxInput];
+           }
+
+        // Update the variables
+        readRangeCheck -= PAGE_SIZE;
+        readRange -= PAGE_SIZE;
+        address += PAGE_SIZE;
+        userBufferInput++;
+
+        // Initialize buffer to zero
+        bzero(memoryPageReadRx, sizeof(memoryPageReadRx));
+    }
+}
+#endif //#ifdef SPI
 /* USER CODE END 0 */
 
 /**
@@ -247,11 +385,12 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_USART2_UART_Init();
-  MX_RTC_Init();
+  //MX_RTC_Init();
   //MX_IWDG_Init();
   //MX_WWDG_Init();
-  MX_I2C1_Init();
-  MX_ADC1_Init();
+  //MX_I2C1_Init();
+  //MX_ADC1_Init();
+  MX_SPI1_Init();
   /* USER CODE BEGIN 2 */
 #ifdef I_W_D_G
   HAL_UART_Transmit(&huart2, (uint8_t *)"Watchdog is initialized\n", sizeof("Watchdog is initialized\n"), 1000);
@@ -298,6 +437,7 @@ int main(void)
 #ifdef ADC_IT
    HAL_ADC_Start_IT(&hadc1);
 #endif //#ifdef ADC_IT
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -317,7 +457,7 @@ int main(void)
 	  	  	  HAL_Delay(1000);
 //
 	  	      /* Get the current time from the RTC */
-	  	  	  getCurrentTime();
+	 	  	  getCurrentTime();
 //
 //	      /* Print the timeS in Tera Term */
 	      HAL_UART_Transmit(&huart2, (uint8_t *)timeString, MAX_TIME_STRING_LENGTH, 1000);
@@ -387,7 +527,45 @@ int main(void)
 	    	    HAL_Delay(1000);
 	     }
 #endif //#ifdef ADC_IT
+
+#ifdef SPI
+	 	//Condition to check whether device is ready or not
+	     isDeviceReadyAT45DB081E();
+	     break;
+#endif //#ifdef SPI
   }
+#ifdef SPI
+  	 //To read the DeviceID, manufacturer details.
+  	 uint8_t DeviceIDRxBuffer[6] = {0, 0, 0, 0, 0, 0};
+  	 uint8_t DeviceIDTxBuffer[6] = {0x9F, 0, 0, 0, 0, 0};
+  	 spiChipSelect();
+	 HAL_SPI_TransmitReceive(&hspi1, DeviceIDTxBuffer, DeviceIDRxBuffer, 6, 1000);
+	 spiChipDeselect();
+
+	 //Filling the "buffer" and its size is BUFFER_SIZE
+	 for (uint16_t bufferInput = 0; bufferInput < BUFFER_SIZE; bufferInput++) {
+	         if (bufferInput <= 255) {
+	             buffer[bufferInput] = (uint8_t)bufferInput;
+	         } else {
+	             buffer[bufferInput] = (uint8_t)(255 - (bufferInput - 256));
+	         }
+	     }
+	 /* the parameter of memoryWrite is
+	  para1 - Address of mainMemory, on which you want to write the buffer
+	  para2 - Pass the "buffer" i.e. content you want to write to mainMemory
+	  para3 - From para2 how much you want to write i.e. no of bytes
+	  */
+
+	 flashMemoryWriteAT45DB081E(MEMORY_WRITE_ADDRESS, buffer, 512);
+	 /* the parameter of memoryRead and its size is SIZE
+	  para1 - Address of mainMemory, from which you want to start to read
+	  para2 - Pass the "userBuffer" i.e. content you want to read from mainMemory will be stored in this buffer
+	  para3 - how much bytes you want to read
+	  */
+	 flashMemoryReadAT45DB081E(MEMORY_READ_ADDRESS, userBuffer, 2);
+while(1){
+}
+#endif //#ifdef SPI
   /* USER CODE END 3 */
 }
 
@@ -659,6 +837,44 @@ static void MX_RTC_Init(void)
 }
 
 /**
+  * @brief SPI1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_SPI1_Init(void)
+{
+
+  /* USER CODE BEGIN SPI1_Init 0 */
+
+  /* USER CODE END SPI1_Init 0 */
+
+  /* USER CODE BEGIN SPI1_Init 1 */
+
+  /* USER CODE END SPI1_Init 1 */
+  /* SPI1 parameter configuration*/
+  hspi1.Instance = SPI1;
+  hspi1.Init.Mode = SPI_MODE_MASTER;
+  hspi1.Init.Direction = SPI_DIRECTION_2LINES;
+  hspi1.Init.DataSize = SPI_DATASIZE_8BIT;
+  hspi1.Init.CLKPolarity = SPI_POLARITY_LOW;
+  hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
+  hspi1.Init.NSS = SPI_NSS_HARD_OUTPUT;
+  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_2;
+  hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
+  hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
+  hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
+  hspi1.Init.CRCPolynomial = 10;
+  if (HAL_SPI_Init(&hspi1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN SPI1_Init 2 */
+
+  /* USER CODE END SPI1_Init 2 */
+
+}
+
+/**
   * @brief USART2 Initialization Function
   * @param None
   * @retval None
@@ -743,22 +959,12 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(B1_GPIO_Port, B1_Pin, GPIO_PIN_RESET);
 
-  /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);
-
   /*Configure GPIO pin : B1_Pin */
   GPIO_InitStruct.Pin = B1_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(B1_GPIO_Port, &GPIO_InitStruct);
-
-  /*Configure GPIO pin : LD2_Pin */
-  GPIO_InitStruct.Pin = LD2_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(LD2_GPIO_Port, &GPIO_InitStruct);
 
 /* USER CODE BEGIN MX_GPIO_Init_2 */
 /* USER CODE END MX_GPIO_Init_2 */
