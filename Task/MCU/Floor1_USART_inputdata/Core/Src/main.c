@@ -82,6 +82,16 @@
 #define NO_OF_BITS_TO_BE_EXTRACTED_FOR_BYTES_ADDRESS 8
 #define PAGE_SIZE 256
 #define BUFFER_SIZE 512
+#define DEBUG_SPI_FLASH_CHIP_AT45DB081E 0
+#define MEMORY_PAGE_READ_TX_SIZE 6
+#define MEMORY_WRITE_ADDRESS 3583
+#if (MEMORY_WRITE_ADDRESS < 0 || MEMORY_WRITE_ADDRESS > 4350)
+    #error Invalid MEMORY_WRITE_ADDRESS value. It must be within the range of 0 to 4350.
+#endif
+#define MEMORY_READ_ADDRESS 3583
+#if (MEMORY_READ_ADDRESS < 0 || MEMORY_READ_ADDRESS > 4350)
+    #error Invalid MEMORY_READ_ADDRESS value. It must be within the range of 0 to 4350.
+#endif
 #endif //#ifdef SPI
 /* USER CODE END PM */
 
@@ -151,7 +161,9 @@ int adcInterruptCheckFlag=0;
 #endif //#ifdef ADC_IT
 
 #ifdef SPI
-//uint8_t readRx[261];
+#if DEBUG_SPI_FLASH_CHIP_AT45DB081E
+uint8_t readRx[261];
+#endif //#if DEBUG_SPI_FLASH_CHIP_AT45DB081E
 uint8_t memoryPageReadRx[262];
 uint8_t buffer[BUFFER_SIZE];
 uint8_t userBuffer[BUFFER_SIZE];
@@ -250,7 +262,7 @@ void spiChipDeselect(){
     HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
 }
 
-int deviceReady(){
+void isDeviceReadyAT45DB081E(){
 	while(1){
 		uint8_t rx_buffer[3] = {0, 0, 0};
 		uint8_t tx_buffer[3] = {0xD7};
@@ -258,43 +270,49 @@ int deviceReady(){
 		HAL_SPI_TransmitReceive(&hspi1, tx_buffer, rx_buffer, 3, 1000);
 		spiChipDeselect();
 		if(((rx_buffer[1]>>BIT_NUMBER) & 1)==1){
+#if DEBUG_SPI_FLASH_CHIP_AT45DB081E
 			HAL_UART_Transmit(&huart2, (uint8_t *)"Device is ready\n", sizeof("Device is ready\n"), 1000);
-			return 1;
+#endif //#if DEBUG_SPI_FLASH_CHIP_AT45DB081E
 			break;
 		}
 	}
 }
 
-void memoryWrite(uint32_t address, uint8_t* buffer, int noOfBytes)
+void flashMemoryWriteAT45DB081E(uint32_t address, uint8_t* buffer, int noOfBytes)
 {
     uint8_t commandTx[4] = {0x00};
+
     while (noOfBytes > 0) {
+
+    	//Condition to check whether device is ready or not
+    	isDeviceReadyAT45DB081E();
 
         // Transmit to the buffer
         commandTx[0]=0x84;
         commandTx[1]=0x00;
         commandTx[2]=0x00;
         commandTx[3]=0x00;
-
         spiChipSelect();
         HAL_SPI_Transmit(&hspi1, commandTx, sizeof(commandTx), HAL_MAX_DELAY);
-        HAL_SPI_Transmit(&hspi1, buffer, (noOfBytes > 256) ? 256 : noOfBytes, HAL_MAX_DELAY);
+        HAL_SPI_Transmit(&hspi1, buffer, (noOfBytes > PAGE_SIZE) ? PAGE_SIZE : noOfBytes, HAL_MAX_DELAY);
         spiChipDeselect();
 
         //Condition to check whether device is ready or not
-        deviceReady();
+        isDeviceReadyAT45DB081E();
 
+#if DEBUG_SPI_FLASH_CHIP_AT45DB081E
         //Read data from buffer
-//		HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
-//        uint8_t readTx[261] = {0xD4, 0x00, 0x00, 0x00, 0x00};
-//        HAL_SPI_TransmitReceive(&hspi1, readTx, readRx, 261, 1000);
-//        HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
+		HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
+        uint8_t readTx[261] = {0xD4, 0x00, 0x00, 0x00, 0x00};
+        HAL_SPI_TransmitReceive(&hspi1, readTx, readRx, 261, 1000);
+        HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
+#endif //#if DEBUG_SPI_FLASH_CHIP_AT45DB081E
 
         //Buffer to Main Memory Page Program with Built-In Erase(at Page 0)
-        spiChipSelect();
-        commandTx[0]=0x83;
+        commandTx[0] = 0x83;
         commandTx[1] = address >> 16;
         commandTx[2] = (address>>(POSITION_OF_BITS-1)) & ((1<<NO_OF_BITS_TO_BE_EXTRACTED)-1);
+        spiChipSelect();
         HAL_SPI_Transmit(&hspi1, commandTx, sizeof(commandTx), 1000);
         spiChipDeselect();
 
@@ -302,16 +320,15 @@ void memoryWrite(uint32_t address, uint8_t* buffer, int noOfBytes)
         noOfBytes -= PAGE_SIZE;
         buffer += PAGE_SIZE;
         address += PAGE_SIZE;
-
-        //Condition to check whether device is ready or not
-        deviceReady();
     }
+	//Condition to check whether device is ready or not
+	isDeviceReadyAT45DB081E();
 }
 
-void memoryRead(uint32_t address, uint8_t* userBuffer, int readRange)
+void flashMemoryReadAT45DB081E(uint32_t address, uint8_t* userBuffer, int readRange)
 {
     int userBufferInput=0;
-    int readRangeCheck=(readRange > 256) ? 261 :readRange;
+    int readRangeCheck=(readRange >= PAGE_SIZE) ? PAGE_SIZE+(MEMORY_PAGE_READ_TX_SIZE-1):readRange+7;
     uint8_t memoryPageReadTx[262] = {0x1B, address >> 16, (address >> (POSITION_OF_BITS - 1)) & ((1 << NO_OF_BITS_TO_BE_EXTRACTED) - 1), (address >> (POSITION_OF_BITS_FOR_BYTES_ADDRESS - 1)) & ((1 << NO_OF_BITS_TO_BE_EXTRACTED_FOR_BYTES_ADDRESS) - 1), 0x00, 0x00};
 
     while (readRangeCheck > 0) {
@@ -319,9 +336,9 @@ void memoryRead(uint32_t address, uint8_t* userBuffer, int readRange)
         memoryPageReadTx[1] = address >> 16;
         memoryPageReadTx[2] = (address>>(POSITION_OF_BITS-1)) & ((1<<NO_OF_BITS_TO_BE_EXTRACTED)-1);
         memoryPageReadTx[3] = (address >> (POSITION_OF_BITS_FOR_BYTES_ADDRESS - 1)) & ((1 << NO_OF_BITS_TO_BE_EXTRACTED_FOR_BYTES_ADDRESS) - 1);
-        HAL_SPI_TransmitReceive(&hspi1, memoryPageReadTx, memoryPageReadRx, PAGE_SIZE+6, 1000);
+        HAL_SPI_TransmitReceive(&hspi1, memoryPageReadTx, memoryPageReadRx, PAGE_SIZE+MEMORY_PAGE_READ_TX_SIZE, 1000);
         spiChipDeselect();
-        readRangeCheck=(readRange >= 256) ? 261 :readRange+7;
+        readRangeCheck=(readRange >= PAGE_SIZE) ? PAGE_SIZE+(MEMORY_PAGE_READ_TX_SIZE-1)/*261*/ :readRange+7;
         for (int memoryPageReadRxInput = 7; memoryPageReadRxInput <= readRangeCheck; memoryPageReadRxInput++, userBufferInput++) {
         	userBuffer[userBufferInput] = memoryPageReadRx[memoryPageReadRxInput];
            }
@@ -512,13 +529,9 @@ int main(void)
 #endif //#ifdef ADC_IT
 
 #ifdef SPI
-	     if(deviceReady()==1){
-	    	 break;
-	     }
-	     else
-			{
-			   HAL_Delay(10);
-			}
+	 	//Condition to check whether device is ready or not
+	     isDeviceReadyAT45DB081E();
+	     break;
 #endif //#ifdef SPI
   }
 #ifdef SPI
@@ -542,13 +555,14 @@ int main(void)
 	  para2 - Pass the "buffer" i.e. content you want to write to mainMemory
 	  para3 - From para2 how much you want to write i.e. no of bytes
 	  */
-	 memoryWrite(3583, buffer, 512);
+
+	 flashMemoryWriteAT45DB081E(MEMORY_WRITE_ADDRESS, buffer, 512);
 	 /* the parameter of memoryRead and its size is SIZE
 	  para1 - Address of mainMemory, from which you want to start to read
 	  para2 - Pass the "userBuffer" i.e. content you want to read from mainMemory will be stored in this buffer
 	  para3 - how much bytes you want to read
 	  */
-	 memoryRead(3583, userBuffer, 400);
+	 flashMemoryReadAT45DB081E(MEMORY_READ_ADDRESS, userBuffer, 2);
 while(1){
 }
 #endif //#ifdef SPI
