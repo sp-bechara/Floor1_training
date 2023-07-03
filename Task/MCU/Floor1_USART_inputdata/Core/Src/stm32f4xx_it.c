@@ -241,7 +241,7 @@ void USART2_IRQHandler(void)
 	 if ((USART2->SR & USART_SR_RXNE) != 0)    // Check if data is received
 	    {
 		 RecievedData = USART2->DR;   // Read the received data
-	        USART2->DR = RecievedData;
+	     USART2->DR = RecievedData;
 	    }
 #endif //ifdef ECHOBACK
   /* USER CODE END USART2_IRQn 0 */
