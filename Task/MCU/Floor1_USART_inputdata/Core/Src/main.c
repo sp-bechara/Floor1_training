@@ -339,7 +339,7 @@ void flashMemoryReadAT45DB081E(uint32_t address, uint8_t* userBuffer, int readRa
         HAL_SPI_TransmitReceive(&hspi1, memoryPageReadTx, memoryPageReadRx, PAGE_SIZE+MEMORY_PAGE_READ_TX_SIZE, 1000);
         spiChipDeselect();
         readRangeCheck=(readRange >= PAGE_SIZE) ? PAGE_SIZE+(MEMORY_PAGE_READ_TX_SIZE-1)/*261*/ :readRange+7;
-        for (int memoryPageReadRxInput = 7; memoryPageReadRxInput <= readRangeCheck; memoryPageReadRxInput++, userBufferInput++) {
+        for (int memoryPageReadRxInput = 6; memoryPageReadRxInput <= readRangeCheck; memoryPageReadRxInput++, userBufferInput++) {
         	userBuffer[userBufferInput] = memoryPageReadRx[memoryPageReadRxInput];
            }
 
