@@ -437,7 +437,6 @@ int main(void)
 #ifdef ADC_IT
    HAL_ADC_Start_IT(&hadc1);
 #endif //#ifdef ADC_IT
-
   /* USER CODE END 2 */
 
   /* Infinite loop */
