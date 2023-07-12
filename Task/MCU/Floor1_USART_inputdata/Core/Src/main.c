@@ -18,6 +18,7 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "cmsis_os.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -110,6 +111,8 @@ UART_HandleTypeDef huart2;
 
 WWDG_HandleTypeDef hwwdg;
 
+osThreadId Task01Handle;
+osThreadId Task02Handle;
 /* USER CODE BEGIN PV */
 #ifdef ECHOBACK
 char RecievedData;
@@ -180,6 +183,9 @@ static void MX_WWDG_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_ADC1_Init(void);
 static void MX_SPI1_Init(void);
+void StartTask01(void const * argument);
+void StartTask02(void const * argument);
+
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -385,11 +391,11 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_USART2_UART_Init();
-  //MX_RTC_Init();
-  //MX_IWDG_Init();
-  //MX_WWDG_Init();
-  //MX_I2C1_Init();
-  //MX_ADC1_Init();
+  MX_RTC_Init();
+  MX_IWDG_Init();
+  MX_WWDG_Init();
+  MX_I2C1_Init();
+  MX_ADC1_Init();
   MX_SPI1_Init();
   /* USER CODE BEGIN 2 */
 #ifdef I_W_D_G
@@ -439,6 +445,38 @@ int main(void)
 #endif //#ifdef ADC_IT
   /* USER CODE END 2 */
 
+  /* USER CODE BEGIN RTOS_MUTEX */
+  /* add mutexes, ... */
+  /* USER CODE END RTOS_MUTEX */
+
+  /* USER CODE BEGIN RTOS_SEMAPHORES */
+  /* add semaphores, ... */
+  /* USER CODE END RTOS_SEMAPHORES */
+
+  /* USER CODE BEGIN RTOS_TIMERS */
+  /* start timers, add new ones, ... */
+  /* USER CODE END RTOS_TIMERS */
+
+  /* USER CODE BEGIN RTOS_QUEUES */
+  /* add queues, ... */
+  /* USER CODE END RTOS_QUEUES */
+
+  /* Create the thread(s) */
+  /* definition and creation of Task01 */
+  osThreadDef(Task01, StartTask01, osPriorityNormal, 0, 128);
+  Task01Handle = osThreadCreate(osThread(Task01), NULL);
+
+  /* definition and creation of Task02 */
+  osThreadDef(Task02, StartTask02, osPriorityNormal, 0, 128);
+  Task02Handle = osThreadCreate(osThread(Task02), NULL);
+
+  /* USER CODE BEGIN RTOS_THREADS */
+  /* add threads, ... */
+  /* USER CODE END RTOS_THREADS */
+
+  /* Start scheduler */
+  osKernelStart();
+  /* We should never get here as control is now taken by the scheduler */
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
@@ -989,8 +1027,45 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
     adcInterruptCheckFlag++;
 }
 #endif //#ifdef ADC_IT
-
 /* USER CODE END 4 */
+
+/* USER CODE BEGIN Header_StartTask01 */
+/**
+  * @brief  Function implementing the Task01 thread.
+  * @param  argument: Not used
+  * @retval None
+  */
+/* USER CODE END Header_StartTask01 */
+void StartTask01(void const * argument)
+{
+  /* USER CODE BEGIN 5 */
+  /* Infinite loop */
+  for(;;)
+  {
+	HAL_UART_Transmit(&huart2, (uint8_t *)"TASK-1 is running \n\r", sizeof("TASK-1 is running \n\r"), 1000);
+    osDelay(1);
+  }
+  /* USER CODE END 5 */
+}
+
+/* USER CODE BEGIN Header_StartTask02 */
+/**
+* @brief Function implementing the Task02 thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_StartTask02 */
+void StartTask02(void const * argument)
+{
+  /* USER CODE BEGIN StartTask02 */
+  /* Infinite loop */
+  for(;;)
+  {
+	HAL_UART_Transmit(&huart2, (uint8_t *)"TASK-2 is running \n\r", sizeof("TASK-2 is running \n\r"), 1000);
+    osDelay(1);
+  }
+  /* USER CODE END StartTask02 */
+}
 
 /**
   * @brief  This function is executed in case of error occurrence.
