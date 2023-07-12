@@ -466,9 +466,11 @@ int main(void)
   osThreadDef(Task01, StartTask01, osPriorityNormal, 0, 128);
   Task01Handle = osThreadCreate(osThread(Task01), NULL);
 
-  /* definition and creation of Task02 */
-  osThreadDef(Task02, StartTask02, osPriorityNormal, 0, 128);
+//  /* definition and creation of Task02 */
+  osThreadDef(Task02, StartTask02, osPriorityHigh, 0, 128);
   Task02Handle = osThreadCreate(osThread(Task02), NULL);
+
+
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -1043,7 +1045,7 @@ void StartTask01(void const * argument)
   for(;;)
   {
 	HAL_UART_Transmit(&huart2, (uint8_t *)"TASK-1 is running \n\r", sizeof("TASK-1 is running \n\r"), 1000);
-    osDelay(1);
+    //osDelay(1);
   }
   /* USER CODE END 5 */
 }
@@ -1062,7 +1064,7 @@ void StartTask02(void const * argument)
   for(;;)
   {
 	HAL_UART_Transmit(&huart2, (uint8_t *)"TASK-2 is running \n\r", sizeof("TASK-2 is running \n\r"), 1000);
-    osDelay(1);
+    //osDelay(1);
   }
   /* USER CODE END StartTask02 */
 }
