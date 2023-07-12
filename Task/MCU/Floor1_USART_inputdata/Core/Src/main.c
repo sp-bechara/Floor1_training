@@ -32,8 +32,6 @@
 #ifdef SPI
 #include <string.h>
 #endif //#ifdef SPI
-
-#include<stdlib.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -170,11 +168,6 @@ uint8_t memoryPageReadRx[262];
 uint8_t buffer[BUFFER_SIZE];
 uint8_t userBuffer[BUFFER_SIZE];
 #endif //#ifdef SPI
-
-uint32_t internalFlashInputBuffer[512];
-uint32_t internalFlashRXBuffer[512];
-//uint32_t startSectortempBuffer[131072]={0};
-//uint32_t tempBuffer[131072]={0};
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -361,265 +354,6 @@ void flashMemoryReadAT45DB081E(uint32_t address, uint8_t* userBuffer, int readRa
     }
 }
 #endif //#ifdef SPI
-
-//static uint32_t GetSector(uint32_t Address)
-//{
-//  uint32_t sector = 0;
-//
-//  if((Address < 0x08003FFF) && (Address >= 0x08000000))
-//  {
-//
-//    sector = FLASH_SECTOR_0;
-//  }
-//  else if((Address < 0x08007FFF) && (Address >= 0x08004000))
-//  {
-//
-//    sector = FLASH_SECTOR_1;
-//  }
-//  else if((Address < 0x0800BFFF) && (Address >= 0x08008000))
-//  {
-//
-//    sector = FLASH_SECTOR_2;
-//  }
-//  else if((Address < 0x0800FFFF) && (Address >= 0x0800C000))
-//  {
-//
-//    sector = FLASH_SECTOR_3;
-//  }
-//  else if((Address < 0x0801FFFF) && (Address >= 0x08010000))
-//  {
-//
-//    sector = FLASH_SECTOR_4;
-//  }
-//  else if((Address < 0x0803FFFF) && (Address >= 0x08020000))
-//  {
-//
-//    sector = FLASH_SECTOR_5;
-//  }
-//  else if((Address < 0x0805FFFF) && (Address >= 0x08040000))
-//  {
-//
-//    sector = FLASH_SECTOR_6;
-//  }
-//  else if((Address < 0x0807FFFF) && (Address >= 0x08060000))
-//  {
-//
-//    sector = FLASH_SECTOR_7;
-//  }
-//  return sector;
-//}
-
-static uint32_t GetSector(uint32_t Address)
-{
-	if(Address >= 0x08000000 && Address < 0x08010000)
-	{
-		uint32_t add=(Address>>0) & ((1<<16)-1);
-		//uint32_t sec=add >> 14;
-		return add >> 14;
-	}
-	else if(Address >=0x08010000 && Address < 0x08020000)
-	{
-		uint32_t add=(Address>>0) & ((1<<17)-1);
-		return add >> 14;
-	}
-	else
-	{
-		uint32_t add=(Address>>16) & ((1<<4)-1);
-		return (add==2) ? 5 :(add==4) ? 6: 7;
-
-	}
-}
-
-void internalFlashReadData(uint32_t StartSectorAddress, uint32_t *RxBuf, uint16_t numberofwords)
-{
-	while (1)
-	{
-
-		*RxBuf = *(__IO uint32_t *)StartSectorAddress;
-		StartSectorAddress += 4;
-		RxBuf++;
-		if (!(numberofwords--)) break;
-	}
-}
-
-
-uint32_t internalFlashWriteData(uint32_t StartSectorAddress, uint32_t *Data, uint16_t numberofwords)
-{
-
-	static FLASH_EraseInitTypeDef EraseInitStruct;
-	uint32_t SECTORError;
-	int sofar=0;
-
-
-	 /* Unlock the Flash to enable the flash control register access *************/
-	  HAL_FLASH_Unlock();
-
-	  /* Erase the user Flash area */
-
-	  /* Get the number of sector to erase from 1st sector */
-
-	  uint32_t StartSector = GetSector(StartSectorAddress);
-	  uint32_t EndSectorAddress = StartSectorAddress + numberofwords*4;
-	  uint32_t EndSector = GetSector(EndSectorAddress);
-	  uint32_t startSectorbaseAddress = 0x08000000 + (StartSector * 0x04000);
-	  uint32_t endSectorbaseAddress = 0x08000000 + (EndSector * 0x04000);
-	  uint32_t StartSectorendAddress = 0x08000000 + ((StartSector + 1) * 0x04000) - 0x01;
-	  uint32_t EndSectorendAddress = 0x08000000 + ((EndSector + 1) * 0x04000) - 1;
-	  uint32_t remainingBytes=numberofwords;
-	  uint8_t i=0;
-
-	  //For Start Sector
-
-	  uint32_t *startSectortempBuffer;
-	  if(StartSector < 4)
-	  {
-		  startSectortempBuffer=(uint32_t *)malloc(16384);
-	  }
-	  else if(StartSector == 4)
-	  {
-		  startSectortempBuffer=(uint32_t *)malloc(65536);
-	  }
-	  else
-	  {
-		  startSectortempBuffer=(uint32_t *)malloc(131072);
-	  }
-	   //Copy the start sector data into a startSectortempBuffer
-	  internalFlashReadData(startSectorbaseAddress, startSectortempBuffer, (StartSector < 4) ? 16384 : (StartSector == 4) ? 65536 : 131072);
-
-	  for(uint8_t startSectortempBufferInput= StartSectorAddress-startSectorbaseAddress, i=0; startSectortempBufferInput < (StartSectorendAddress-StartSectorAddress)/*numberofwords*/; startSectortempBufferInput++)
-	  {
-		  startSectortempBuffer[startSectortempBufferInput]=Data[i];
-		  remainingBytes--;
-	  }
-
-	  //For end Sector
-	  uint32_t *endSectortempBuffer;
-	  	  if(EndSector < 4)
-	  	  {
-	  		endSectortempBuffer=(uint32_t *)malloc(16384);
-	  	  }
-	  	  else if(EndSector == 4)
-	  	  {
-	  		endSectortempBuffer=(uint32_t *)malloc(65536);
-	  	  }
-	  	  else
-	  	  {
-	  		endSectortempBuffer=(uint32_t *)malloc(131072);
-	  	  }
-	  	   //Copy the start sector data into a tempBuffer
-	  	  internalFlashReadData(startSectorbaseAddress, (uint32_t *)endSectortempBuffer, (EndSector < 4) ? (uint16_t *)16384 : (EndSector == 4) ? (uint16_t *)65536 : (uint16_t *)131072);
-
-	  	  for(uint8_t endSectortempBufferInput= 0, i=0; endSectortempBufferInput < remainingBytes; endSectortempBufferInput++)
-	  	  {
-	  		  endSectortempBuffer[endSectortempBufferInput]=Data[i];
-	  	  }
-
-	  /* Fill EraseInit structure*/
-	  EraseInitStruct.TypeErase     = FLASH_TYPEERASE_SECTORS;
-	  EraseInitStruct.VoltageRange  = FLASH_VOLTAGE_RANGE_3;
-	  EraseInitStruct.Sector        = StartSector;
-	  EraseInitStruct.NbSectors     = (EndSector - StartSector) + 1;
-//	  EraseInitStruct.NbSectors     = 1;
-
-
-	  /* Note: If an erase operation in Flash memory also concerns data in the data or instruction cache,
-	     you have to make sure that these data are rewritten before they are accessed during code
-	     execution. If this cannot be done safely, it is recommended to flush the caches by setting the
-	     DCRST and ICRST bits in the FLASH_CR register. */
-	  if (HAL_FLASHEx_Erase(&EraseInitStruct, &SECTORError) != HAL_OK)
-	  {
-		  return HAL_FLASH_GetError ();
-	  }
-
-	  /* Program the user Flash area word by word
-	    (area defined by FLASH_USER_START_ADDR and FLASH_USER_END_ADDR) ***********/
-
-		//internalFlashErase(StartSectorAddress, 10);
-
-//	   while (sofar<numberofwords)
-//	   {
-//	     if (HAL_FLASH_Program(FLASH_TYPEPROGRAM_WORD, StartSectorAddress, Data[sofar]) == HAL_OK)
-//	     {
-//	    	 StartSectorAddress += 4;  // use StartPageAddress += 2 for half word and 8 for double word
-//	    	 sofar++;
-//	     }
-//	     else
-//	     {
-//	       /* Error occurred while writing data in Flash memory*/
-//	    	 return HAL_FLASH_GetError ();
-//	     }
-//	   }
-//	   while (sofar<numberofwords)
-//	   {
-//	     if (HAL_FLASH_Program(FLASH_TYPEPROGRAM_BYTE, startSectorbaseAddress, startSectortempBuffer[sofar]) == HAL_OK)
-//	     {
-//	    	 startSectorbaseAddress += 1;  // use StartPageAddress += 2 for half word and 8 for double word
-//	    	 sofar++;
-//	     }
-//	     else
-//	     {
-//	       /* Error occurred while writing data in Flash memory*/
-//	    	 return HAL_FLASH_GetError ();
-//	     }
-//	   }
-	  while(sofar < sizeof(startSectortempBuffer))
-	  {
-	 	  	if (HAL_FLASH_Program(FLASH_TYPEPROGRAM_BYTE, startSectorbaseAddress, startSectortempBuffer[sofar]) == HAL_OK)
-	 	    {
-	 	  		 startSectorbaseAddress += 1;  // use StartPageAddress += 2 for half word and 8 for double word
-	 	  		 sofar++;
-	 	    }
-	 	    else
-	 	    {
-	 	    /* Error occurred while writing data in Flash memory*/
-	 	    return HAL_FLASH_GetError ();
-	 	    }
-	 }
-
-	  sofar=0;
-
-	  while(sofar < sizeof(endSectortempBuffer))
-	  {
-		  if (HAL_FLASH_Program(FLASH_TYPEPROGRAM_BYTE, endSectortempBuffer, endSectortempBuffer[sofar]) == HAL_OK)
-		  	     {
-			  endSectortempBuffer += 1;  // use StartPageAddress += 2 for half word and 8 for double word
-		  	    	 sofar++;
-		  	     }
-		  	     else
-		  	     {
-		  	       /* Error occurred while writing data in Flash memory*/
-		  	    	 return HAL_FLASH_GetError ();
-		  	     }
-	  }
-	  /* Lock the Flash to disable the flash control register access (recommended
-	     to protect the FLASH memory against possible unwanted operation) *********/
-	  HAL_FLASH_Lock();
-
-	   return 0;
-}
-uint32_t internalFlashErase(uint32_t StartSectorAddress, uint16_t numberofwords){
-	static FLASH_EraseInitTypeDef EraseInitStruct;
-	uint32_t SECTORError;
-
-	/* Unlock the Flash to enable the flash control register access *************/
-    HAL_FLASH_Unlock();
-
-    uint32_t StartSector = GetSector(StartSectorAddress);
-    uint32_t EndSectorAddress = StartSectorAddress + numberofwords*4;
-    uint32_t EndSector = GetSector(EndSectorAddress);
-
-    /* Fill EraseInit structure*/
-    EraseInitStruct.TypeErase     = FLASH_TYPEERASE_SECTORS;
-    EraseInitStruct.VoltageRange  = FLASH_VOLTAGE_RANGE_3;
-    EraseInitStruct.Sector        = StartSector;
-    EraseInitStruct.NbSectors     = (EndSector - StartSector) + 1;
-
-    if (HAL_FLASHEx_Erase(&EraseInitStruct, &SECTORError) != HAL_OK)
-    	  {
-    		  return HAL_FLASH_GetError ();
-    	  }
-    return 0;
-}
 /* USER CODE END 0 */
 
 /**
@@ -703,27 +437,6 @@ int main(void)
 #ifdef ADC_IT
    HAL_ADC_Start_IT(&hadc1);
 #endif //#ifdef ADC_IT
-
-//   uint32_t internalFlashInputBuffer[10];
-//   uint32_t internalFlashRXBuffer[11];
-
-//for(uint32_t internalFlashInputBufferInput=1; internalFlashInputBufferInput <= 10 ; internalFlashInputBufferInput++){
-//	internalFlashInputBuffer[internalFlashInputBufferInput]=internalFlashInputBufferInput;
-//}
-//internalFlashWriteData(0x08010000, (uint32_t *)internalFlashInputBuffer, 10);
-//internalFlashReadData(0x08010000 , internalFlashRXBuffer, 5);
-//for(uint32_t internalFlashInputBufferInput=5, i=0; internalFlashInputBufferInput < 10; internalFlashInputBufferInput++, i++){
-//	internalFlashRXBuffer[internalFlashInputBufferInput]=i;
-//}
-//internalFlashErase(0x08010000, 10);
-//internalFlashWriteData(0x08010000, (uint32_t *)internalFlashRXBuffer, 10);
-//internalFlashReadData(0x08010000 , rxBuffer, 10);
-
-   for(uint32_t internalFlashInputBufferInput=1; internalFlashInputBufferInput <= 512; internalFlashInputBufferInput++){
-   	internalFlashInputBuffer[internalFlashInputBufferInput]=internalFlashInputBufferInput;
-   }
-   internalFlashWriteData(0x08020000, (uint32_t *)internalFlashInputBuffer, 512);
-   internalFlashReadData(0x801FEFF , internalFlashRXBuffer, 512);
 
   /* USER CODE END 2 */
 
@@ -821,7 +534,6 @@ int main(void)
 	     break;
 #endif //#ifdef SPI
   }
-
 #ifdef SPI
   	 //To read the DeviceID, manufacturer details.
   	 uint8_t DeviceIDRxBuffer[6] = {0, 0, 0, 0, 0, 0};
