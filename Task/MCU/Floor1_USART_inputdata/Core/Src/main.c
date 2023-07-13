@@ -176,6 +176,8 @@ uint8_t userBuffer[BUFFER_SIZE];
 #endif //#ifdef SPI
 
 char buffer[20];
+/* Declare a variable that will be incremented by the hook function. */
+volatile uint32_t ulIdleCycleCount = 0UL;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -192,10 +194,10 @@ static void MX_SPI1_Init(void);
 //void StartTask01(void const * argument);
 //Svoid StartTask02(void const * argument);
 //************************Used in example 2****************************************
-//void vTaskFunction( void *pvParameters );
+void vTaskFunction( void *pvParameters );
 //************************Used in example 6****************************************
-void vContinuousProcessingTask( void *pvParameters );
-void vPeriodicTask( void *pvParameters );
+//void vContinuousProcessingTask( void *pvParameters );
+//void vPeriodicTask( void *pvParameters );
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -374,281 +376,30 @@ void flashMemoryReadAT45DB081E(uint32_t address, uint8_t* userBuffer, int readRa
 /* Define the strings that will be passed in as the task parameters. These are
 defined const and not on the stack to ensure they remain valid when the tasks are
 executing. */
-static const char *pcTextForTask1 = "vContinuousProcessingTask 1 is running\r\n";
-static const char *pcTextForTask2 = "vContinuousProcessingTask 2 is running\r\n";
+
+//************************Used in example 6****************************************
+//static const char *pcTextForTask1 = "vContinuousProcessingTask 1 is running\r\n";
+//static const char *pcTextForTask2 = "vContinuousProcessingTask 2 is running\r\n";
+
+//************************Used in example 2,7****************************************
+static const char *pcTextForTask1 = "Task 1 is running\r\n";
+static const char *pcTextForTask2 = "Task 2 is running\r\n";
+
+//************************Used in example 7****************************************
+/* Idle hook functions MUST be called vApplicationIdleHook(), take no parameters,
+and return void. */
+void vApplicationIdleHook( void )
+{
+/* This hook function does nothing but increment a counter. */
+	ulIdleCycleCount++;
+}
+
 /* USER CODE END 0 */
 
 /**
   * @brief  The application entry point.
   * @retval int
   */
-int main(void)
-{
-  /* USER CODE BEGIN 1 */
-
-  /* USER CODE END 1 */
-
-  /* MCU Configuration--------------------------------------------------------*/
-
-  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
-  HAL_Init();
-
-  /* USER CODE BEGIN Init */
-
-  /* USER CODE END Init */
-
-  /* Configure the system clock */
-  SystemClock_Config();
-
-  /* USER CODE BEGIN SysInit */
-
-  /* USER CODE END SysInit */
-
-  /* Initialize all configured peripherals */
-  MX_GPIO_Init();
-  MX_USART2_UART_Init();
-  MX_RTC_Init();
-  MX_IWDG_Init();
-  MX_WWDG_Init();
-  MX_I2C1_Init();
-  MX_ADC1_Init();
-  MX_SPI1_Init();
-  /* USER CODE BEGIN 2 */
-#ifdef I_W_D_G
-  HAL_UART_Transmit(&huart2, (uint8_t *)"Watchdog is initialized\n", sizeof("Watchdog is initialized\n"), 1000);
-#endif //#ifdef I_W_D_G
-
-#ifdef ECHOBACK
-  // Enable USART2 receive interrupt
-  USART2->CR1 |= USART_CR1_RXNEIE;
-#endif //ifdef ECHOBACK
-
-#ifdef R_T_C
-  /* Check if the RTC has been initialized */
-  if (HAL_RTCEx_BKUPRead(&hrtc, RTC_BKP_DR1) != 0x32F2)
-  {
-      //set the time
-      setInitialTime();
-  }
-  setAlarm();
-#endif //ifdef R_T_C
-
-#ifdef I_W_D_G
-  // Get the current time
-   uint32_t startTime = HAL_GetTick();
-   uint32_t elapsedTime = 0;
-#endif //#ifdef I_W_D_G
-
-#ifdef I_2_C
-   SSD1306_Init();
-   SSD1306_Clear();
-
-   //To print name on a display
-//   SSD1306_GotoXY (0,0);
-//   SSD1306_Puts ("Shrey", &Font_11x18, 1);
-//   SSD1306_GotoXY (0, 30);
-//   SSD1306_Puts ("Bechara", &Font_11x18, 1);
-//   SSD1306_UpdateScreen();
-#endif //#ifdef I_2_C
-
-#ifdef ADC_DMA
-   HAL_ADC_Start_DMA(&hadc1, (uint32_t *)adcRaw, 2);
-   HAL_TIM_Base_Start(&htim3);
-#endif //#ifdef ADC_DMA
-
-#ifdef ADC_IT
-   HAL_ADC_Start_IT(&hadc1);
-#endif //#ifdef ADC_IT
-  /* USER CODE END 2 */
-
-  /* USER CODE BEGIN RTOS_MUTEX */
-  /* add mutexes, ... */
-  /* USER CODE END RTOS_MUTEX */
-
-  /* USER CODE BEGIN RTOS_SEMAPHORES */
-  /* add semaphores, ... */
-  /* USER CODE END RTOS_SEMAPHORES */
-
-  /* USER CODE BEGIN RTOS_TIMERS */
-  /* start timers, add new ones, ... */
-  /* USER CODE END RTOS_TIMERS */
-
-  /* USER CODE BEGIN RTOS_QUEUES */
-  /* add queues, ... */
-  /* USER CODE END RTOS_QUEUES */
-
-  /* Create the thread(s) */
-
-   //************************Used in example 1,3,4,5****************************************
-  /* definition and creation of Task01 */
-//  osThreadDef(Task01, StartTask01, osPriorityNormal, 0, 128);
-//  Task01Handle = osThreadCreate(osThread(Task01), NULL);
-//
-////  /* definition and creation of Task02 */
-//  osThreadDef(Task02, StartTask02, osPriorityHigh, 0, 128);
-//  Task02Handle = osThreadCreate(osThread(Task02), NULL);
-
-   //************************Used in example 2****************************************
-//  /* Create one of the two tasks. */
-//  xTaskCreate( vTaskFunction, /* Pointer to the function that
-//  	  	  	  	  	  	  	  implements the task. */
-//		  	  	  "Task 1", /* Text name for the task. This is to
-//  	  	  	  	  	  	  	  facilitate debugging only. */
-//				  1000, /* Stack depth - small microcontrollers
-//  	  	  	  	  	  	  will use much less stack than this. */
-//				  (void*)pcTextForTask1, /* Pass the text to be printed into the
-//  	  	  	  	  	  	  	  	  	  	  task using the task parameter. */
-//				  1, /* This task will run at priority 1. */
-//				  NULL ); /* The task handle is not used in this
-//  example. */
-//  /* Create the other task in exactly the same way. Note this time that multiple
-//  tasks are being created from the SAME task implementation (vTaskFunction). Only
-//  the value passed in the parameter is different. Two instances of the same
-//  task are being created. */
-//  xTaskCreate( vTaskFunction, "Task 2", 1000, (void*)pcTextForTask2, 2, NULL );
-
-   //************************Used in example 6****************************************
-
-     xTaskCreate(vContinuousProcessingTask, "Task 1", 1000, (void*)pcTextForTask1, 1, NULL );
-     xTaskCreate(vContinuousProcessingTask, "Task 2", 1000, (void*)pcTextForTask2, 1, NULL );
-     xTaskCreate(vPeriodicTask, "Task 3", 1000, NULL, 2, NULL );
-
-  /* USER CODE BEGIN RTOS_THREADS */
-  /* add threads, ... */
-  /* USER CODE END RTOS_THREADS */
-
-  /* Start scheduler */
-  osKernelStart();
-  /* We should never get here as control is now taken by the scheduler */
-  /* Infinite loop */
-  /* USER CODE BEGIN WHILE */
-  while (1)
-  {
-    /* USER CODE END WHILE */
-
-    /* USER CODE BEGIN 3 */
-#ifdef R_T_C
-	  if(RTC_Interrupt_flag!=0)
-	  	      {
-		  	  HAL_UART_Transmit(&huart2, (uint8_t *)"ALarm is called", sizeof("ALarm is called"), 1000);
-	  	      RTC_Interrupt_flag=0;
-	  	      }
-	  /* Wait for a quick delay (e.g., 1 second) */
-	  	  	  HAL_Delay(1000);
-//
-	  	      /* Get the current time from the RTC */
-	 	  	  getCurrentTime();
-//
-//	      /* Print the timeS in Tera Term */
-	      HAL_UART_Transmit(&huart2, (uint8_t *)timeString, MAX_TIME_STRING_LENGTH, 1000);
-	      HAL_UART_Transmit(&huart2, (uint8_t *)"\n", sizeof("\n"), 1000);
-#endif //ifdef R_T_C
-
-#ifdef I_2_C
-//	      SSD1306_Puts (timeString, &Font_11x18, 1);
-//	      SSD1306_UpdateScreen();
-//	      SSD1306_GotoXY (0,0);
-#endif //#ifdef I_2_C
-
-#ifdef I_W_D_G
-	      // Get the elapsed time since starting
-	          elapsedTime = HAL_GetTick() - startTime;
-
-	      // Check if the first 30 seconds have elapsed
-	          if (elapsedTime <= IWDG_TIMEOUT)
-	          {
-	            // Send signal to the watchdog
-	        	HAL_UART_Transmit(&huart2, (uint8_t *)"Health is Okay..!\n", sizeof("Health is Okay..!\n"), 1000);
-	        	HAL_Delay(1000);
-	        	HAL_IWDG_Refresh(&hiwdg);
-	          }
-	          else{
-	        	  HAL_UART_Transmit(&huart2, (uint8_t *)"Health signal is stopped..!\n", sizeof("Health signal is stopped..!\n"), 1000);
-	        	  HAL_Delay(1000);
-	      }
-#endif //#ifdef I_W_D_G
-
-#ifdef ADC_DMA
-	          if(adcConvCmplt){
-	        	  //Something do
-	        	  double VrefInt = (VREFINT * ADCMAX)/adcRaw[0]; //it will give real supply voltage in microcontroller
-	        	  double VTmpSens = (VrefInt*adcRaw[1])/ADCMAX; //it is used to check whether internal temp is running proper or not i.e. If its proper it's value will be similar to 0.76(sensor voltage at 25 degree C)
-	        	  temperature = (VTmpSens - V25)/(AVG_SLOPE) + 25.0;
-	        	  sprintf(tempBuffer,"%0.2lf", temperature);
-	        	  HAL_UART_Transmit(&huart2, (uint8_t *)tempBuffer, strlen(tempBuffer), 1000);
-	    	      HAL_UART_Transmit(&huart2, (uint8_t *)"\n", sizeof("\n"), 1000);
-	    	      SSD1306_GotoXY (0,0);
-	    	      SSD1306_Puts (tempBuffer, &Font_11x18, 1);
-	    	      SSD1306_UpdateScreen();
-	        	  adcConvCmplt=0;
-	        	  HAL_Delay(1000);
-	          }
-#endif //#ifdef ADC_DMA
-
-#ifdef ADC_POLL
-	     HAL_ADC_Start(&hadc1);
-	     HAL_ADC_PollForConversion(&hadc1, 100);
-	     adcVal=HAL_ADC_GetValue(&hadc1);
-	     HAL_ADC_Stop(&hadc1);
-	     double VTmpSens = (VrefInt*adcVal)/ADCMAX; //it is used to check whether internal temp is running proper or not i.e. If its proper it's value will be similar to 0.76(sensor voltage at 25 degree C)
-	     temperature = (VTmpSens - V25)/(AVG_SLOPE) + 25.0;
-	     sprintf(tempBuffer,"%0.2lf", temperature);
-	     HAL_UART_Transmit(&huart2, (uint8_t *)tempBuffer, strlen(tempBuffer), 1000);
-	     HAL_UART_Transmit(&huart2, (uint8_t *)"\n", sizeof("\n"), 1000);
-	     HAL_Delay(1000);
-#endif //#ifdef ADC_POLL
-
-#ifdef ADC_IT
-	     if(adcInterruptCheckFlag){
-	    	    sprintf(tempBuffer,"%0.2lf", temperature);
-	    	    HAL_UART_Transmit(&huart2, (uint8_t *)tempBuffer, strlen(tempBuffer), 1000);
-	    	    HAL_UART_Transmit(&huart2, (uint8_t *)"\n", sizeof("\n"), 1000);
-	    	    adcInterruptCheckFlag=0;
-	    	    HAL_Delay(1000);
-	     }
-#endif //#ifdef ADC_IT
-
-#ifdef SPI
-	 	//Condition to check whether device is ready or not
-	     isDeviceReadyAT45DB081E();
-	     break;
-#endif //#ifdef SPI
-  }
-#ifdef SPI
-  	 //To read the DeviceID, manufacturer details.
-  	 uint8_t DeviceIDRxBuffer[6] = {0, 0, 0, 0, 0, 0};
-  	 uint8_t DeviceIDTxBuffer[6] = {0x9F, 0, 0, 0, 0, 0};
-  	 spiChipSelect();
-	 HAL_SPI_TransmitReceive(&hspi1, DeviceIDTxBuffer, DeviceIDRxBuffer, 6, 1000);
-	 spiChipDeselect();
-
-	 //Filling the "buffer" and its size is BUFFER_SIZE
-	 for (uint16_t bufferInput = 0; bufferInput < BUFFER_SIZE; bufferInput++) {
-	         if (bufferInput <= 255) {
-	             buffer[bufferInput] = (uint8_t)bufferInput;
-	         } else {
-	             buffer[bufferInput] = (uint8_t)(255 - (bufferInput - 256));
-	         }
-	     }
-	 /* the parameter of memoryWrite is
-	  para1 - Address of mainMemory, on which you want to write the buffer
-	  para2 - Pass the "buffer" i.e. content you want to write to mainMemory
-	  para3 - From para2 how much you want to write i.e. no of bytes
-	  */
-
-	 flashMemoryWriteAT45DB081E(MEMORY_WRITE_ADDRESS, buffer, 512);
-	 /* the parameter of memoryRead and its size is SIZE
-	  para1 - Address of mainMemory, from which you want to start to read
-	  para2 - Pass the "userBuffer" i.e. content you want to read from mainMemory will be stored in this buffer
-	  para3 - how much bytes you want to read
-	  */
-	 flashMemoryReadAT45DB081E(MEMORY_READ_ADDRESS, userBuffer, 2);
-while(1){
-}
-#endif //#ifdef SPI
-  /* USER CODE END 3 */
-}
-
 /**
   * @brief System Clock Configuration
   * @retval None
@@ -921,6 +672,273 @@ static void MX_RTC_Init(void)
   * @param None
   * @retval None
   */
+int main(void)
+{
+  /* USER CODE BEGIN 1 */
+
+  /* USER CODE END 1 */
+
+  /* MCU Configuration--------------------------------------------------------*/
+
+  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
+  HAL_Init();
+
+  /* USER CODE BEGIN Init */
+
+  /* USER CODE END Init */
+
+  /* Configure the system clock */
+  SystemClock_Config();
+
+  /* USER CODE BEGIN SysInit */
+
+  /* USER CODE END SysInit */
+
+  /* Initialize all configured peripherals */
+  MX_GPIO_Init();
+  MX_USART2_UART_Init();
+  MX_RTC_Init();
+  MX_IWDG_Init();
+  MX_WWDG_Init();
+  MX_I2C1_Init();
+  MX_ADC1_Init();
+  MX_SPI1_Init();
+  /* USER CODE BEGIN 2 */
+#ifdef I_W_D_G
+  HAL_UART_Transmit(&huart2, (uint8_t *)"Watchdog is initialized\n", sizeof("Watchdog is initialized\n"), 1000);
+#endif //#ifdef I_W_D_G
+
+#ifdef ECHOBACK
+  // Enable USART2 receive interrupt
+  USART2->CR1 |= USART_CR1_RXNEIE;
+#endif //ifdef ECHOBACK
+
+#ifdef R_T_C
+  /* Check if the RTC has been initialized */
+  if (HAL_RTCEx_BKUPRead(&hrtc, RTC_BKP_DR1) != 0x32F2)
+  {
+      //set the time
+      setInitialTime();
+  }
+  setAlarm();
+#endif //ifdef R_T_C
+
+#ifdef I_W_D_G
+  // Get the current time
+   uint32_t startTime = HAL_GetTick();
+   uint32_t elapsedTime = 0;
+#endif //#ifdef I_W_D_G
+
+#ifdef I_2_C
+   SSD1306_Init();
+   SSD1306_Clear();
+
+   //To print name on a display
+//   SSD1306_GotoXY (0,0);
+//   SSD1306_Puts ("Shrey", &Font_11x18, 1);
+//   SSD1306_GotoXY (0, 30);
+//   SSD1306_Puts ("Bechara", &Font_11x18, 1);
+//   SSD1306_UpdateScreen();
+#endif //#ifdef I_2_C
+
+#ifdef ADC_DMA
+   HAL_ADC_Start_DMA(&hadc1, (uint32_t *)adcRaw, 2);
+   HAL_TIM_Base_Start(&htim3);
+#endif //#ifdef ADC_DMA
+
+#ifdef ADC_IT
+   HAL_ADC_Start_IT(&hadc1);
+#endif //#ifdef ADC_IT
+  /* USER CODE END 2 */
+
+  /* USER CODE BEGIN RTOS_MUTEX */
+  /* add mutexes, ... */
+  /* USER CODE END RTOS_MUTEX */
+
+  /* USER CODE BEGIN RTOS_SEMAPHORES */
+  /* add semaphores, ... */
+  /* USER CODE END RTOS_SEMAPHORES */
+
+  /* USER CODE BEGIN RTOS_TIMERS */
+  /* start timers, add new ones, ... */
+  /* USER CODE END RTOS_TIMERS */
+
+  /* USER CODE BEGIN RTOS_QUEUES */
+  /* add queues, ... */
+  /* USER CODE END RTOS_QUEUES */
+
+  /* Create the thread(s) */
+
+   //************************Used in example 1,3,4,5****************************************
+  /* definition and creation of Task01 */
+//  osThreadDef(Task01, StartTask01, osPriorityNormal, 0, 128);
+//  Task01Handle = osThreadCreate(osThread(Task01), NULL);
+//
+////  /* definition and creation of Task02 */
+//  osThreadDef(Task02, StartTask02, osPriorityHigh, 0, 128);
+//  Task02Handle = osThreadCreate(osThread(Task02), NULL);
+
+   //************************Used in example 2****************************************
+  /* Create one of the two tasks. */
+  xTaskCreate( vTaskFunction, /* Pointer to the function that
+  	  	  	  	  	  	  	  implements the task. */
+		  	  	  "Task 1", /* Text name for the task. This is to
+  	  	  	  	  	  	  	  facilitate debugging only. */
+				  1000, /* Stack depth - small microcontrollers
+  	  	  	  	  	  	  will use much less stack than this. */
+				  (void*)pcTextForTask1, /* Pass the text to be printed into the
+  	  	  	  	  	  	  	  	  	  	  task using the task parameter. */
+				  1, /* This task will run at priority 1. */
+				  NULL ); /* The task handle is not used in this
+  example. */
+  /* Create the other task in exactly the same way. Note this time that multiple
+  tasks are being created from the SAME task implementation (vTaskFunction). Only
+  the value passed in the parameter is different. Two instances of the same
+  task are being created. */
+  xTaskCreate( vTaskFunction, "Task 2", 1000, (void*)pcTextForTask2, 2, NULL );
+
+   //************************Used in example 6****************************************
+
+//     xTaskCreate(vContinuousProcessingTask, "Task 1", 1000, (void*)pcTextForTask1, 1, NULL );
+//     xTaskCreate(vContinuousProcessingTask, "Task 2", 1000, (void*)pcTextForTask2, 1, NULL );
+//     xTaskCreate(vPeriodicTask, "Task 3", 1000, NULL, 2, NULL );
+
+  /* USER CODE BEGIN RTOS_THREADS */
+  /* add threads, ... */
+  /* USER CODE END RTOS_THREADS */
+
+  /* Start scheduler */
+  osKernelStart();
+  /* We should never get here as control is now taken by the scheduler */
+  /* Infinite loop */
+  /* USER CODE BEGIN WHILE */
+  while (1)
+  {
+    /* USER CODE END WHILE */
+
+    /* USER CODE BEGIN 3 */
+#ifdef R_T_C
+	  if(RTC_Interrupt_flag!=0)
+	  	      {
+		  	  HAL_UART_Transmit(&huart2, (uint8_t *)"ALarm is called", sizeof("ALarm is called"), 1000);
+	  	      RTC_Interrupt_flag=0;
+	  	      }
+	  /* Wait for a quick delay (e.g., 1 second) */
+	  	  	  HAL_Delay(1000);
+//
+	  	      /* Get the current time from the RTC */
+	 	  	  getCurrentTime();
+//
+//	      /* Print the timeS in Tera Term */
+	      HAL_UART_Transmit(&huart2, (uint8_t *)timeString, MAX_TIME_STRING_LENGTH, 1000);
+	      HAL_UART_Transmit(&huart2, (uint8_t *)"\n", sizeof("\n"), 1000);
+#endif //ifdef R_T_C
+
+#ifdef I_2_C
+//	      SSD1306_Puts (timeString, &Font_11x18, 1);
+//	      SSD1306_UpdateScreen();
+//	      SSD1306_GotoXY (0,0);
+#endif //#ifdef I_2_C
+
+#ifdef I_W_D_G
+	      // Get the elapsed time since starting
+	          elapsedTime = HAL_GetTick() - startTime;
+
+	      // Check if the first 30 seconds have elapsed
+	          if (elapsedTime <= IWDG_TIMEOUT)
+	          {
+	            // Send signal to the watchdog
+	        	HAL_UART_Transmit(&huart2, (uint8_t *)"Health is Okay..!\n", sizeof("Health is Okay..!\n"), 1000);
+	        	HAL_Delay(1000);
+	        	HAL_IWDG_Refresh(&hiwdg);
+	          }
+	          else{
+	        	  HAL_UART_Transmit(&huart2, (uint8_t *)"Health signal is stopped..!\n", sizeof("Health signal is stopped..!\n"), 1000);
+	        	  HAL_Delay(1000);
+	      }
+#endif //#ifdef I_W_D_G
+
+#ifdef ADC_DMA
+	          if(adcConvCmplt){
+	        	  //Something do
+	        	  double VrefInt = (VREFINT * ADCMAX)/adcRaw[0]; //it will give real supply voltage in microcontroller
+	        	  double VTmpSens = (VrefInt*adcRaw[1])/ADCMAX; //it is used to check whether internal temp is running proper or not i.e. If its proper it's value will be similar to 0.76(sensor voltage at 25 degree C)
+	        	  temperature = (VTmpSens - V25)/(AVG_SLOPE) + 25.0;
+	        	  sprintf(tempBuffer,"%0.2lf", temperature);
+	        	  HAL_UART_Transmit(&huart2, (uint8_t *)tempBuffer, strlen(tempBuffer), 1000);
+	    	      HAL_UART_Transmit(&huart2, (uint8_t *)"\n", sizeof("\n"), 1000);
+	    	      SSD1306_GotoXY (0,0);
+	    	      SSD1306_Puts (tempBuffer, &Font_11x18, 1);
+	    	      SSD1306_UpdateScreen();
+	        	  adcConvCmplt=0;
+	        	  HAL_Delay(1000);
+	          }
+#endif //#ifdef ADC_DMA
+
+#ifdef ADC_POLL
+	     HAL_ADC_Start(&hadc1);
+	     HAL_ADC_PollForConversion(&hadc1, 100);
+	     adcVal=HAL_ADC_GetValue(&hadc1);
+	     HAL_ADC_Stop(&hadc1);
+	     double VTmpSens = (VrefInt*adcVal)/ADCMAX; //it is used to check whether internal temp is running proper or not i.e. If its proper it's value will be similar to 0.76(sensor voltage at 25 degree C)
+	     temperature = (VTmpSens - V25)/(AVG_SLOPE) + 25.0;
+	     sprintf(tempBuffer,"%0.2lf", temperature);
+	     HAL_UART_Transmit(&huart2, (uint8_t *)tempBuffer, strlen(tempBuffer), 1000);
+	     HAL_UART_Transmit(&huart2, (uint8_t *)"\n", sizeof("\n"), 1000);
+	     HAL_Delay(1000);
+#endif //#ifdef ADC_POLL
+
+#ifdef ADC_IT
+	     if(adcInterruptCheckFlag){
+	    	    sprintf(tempBuffer,"%0.2lf", temperature);
+	    	    HAL_UART_Transmit(&huart2, (uint8_t *)tempBuffer, strlen(tempBuffer), 1000);
+	    	    HAL_UART_Transmit(&huart2, (uint8_t *)"\n", sizeof("\n"), 1000);
+	    	    adcInterruptCheckFlag=0;
+	    	    HAL_Delay(1000);
+	     }
+#endif //#ifdef ADC_IT
+
+#ifdef SPI
+	 	//Condition to check whether device is ready or not
+	     isDeviceReadyAT45DB081E();
+	     break;
+#endif //#ifdef SPI
+  }
+#ifdef SPI
+  	 //To read the DeviceID, manufacturer details.
+  	 uint8_t DeviceIDRxBuffer[6] = {0, 0, 0, 0, 0, 0};
+  	 uint8_t DeviceIDTxBuffer[6] = {0x9F, 0, 0, 0, 0, 0};
+  	 spiChipSelect();
+	 HAL_SPI_TransmitReceive(&hspi1, DeviceIDTxBuffer, DeviceIDRxBuffer, 6, 1000);
+	 spiChipDeselect();
+
+	 //Filling the "buffer" and its size is BUFFER_SIZE
+	 for (uint16_t bufferInput = 0; bufferInput < BUFFER_SIZE; bufferInput++) {
+	         if (bufferInput <= 255) {
+	             buffer[bufferInput] = (uint8_t)bufferInput;
+	         } else {
+	             buffer[bufferInput] = (uint8_t)(255 - (bufferInput - 256));
+	         }
+	     }
+	 /* the parameter of memoryWrite is
+	  para1 - Address of mainMemory, on which you want to write the buffer
+	  para2 - Pass the "buffer" i.e. content you want to write to mainMemory
+	  para3 - From para2 how much you want to write i.e. no of bytes
+	  */
+
+	 flashMemoryWriteAT45DB081E(MEMORY_WRITE_ADDRESS, buffer, 512);
+	 /* the parameter of memoryRead and its size is SIZE
+	  para1 - Address of mainMemory, from which you want to start to read
+	  para2 - Pass the "userBuffer" i.e. content you want to read from mainMemory will be stored in this buffer
+	  para3 - how much bytes you want to read
+	  */
+	 flashMemoryReadAT45DB081E(MEMORY_READ_ADDRESS, userBuffer, 2);
+while(1){
+}
+#endif //#ifdef SPI
+  /* USER CODE END 3 */
+}
+
 static void MX_SPI1_Init(void)
 {
 
@@ -1125,62 +1143,62 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
 //  /* USER CODE END StartTask02 */
 //}
 
-//************************Used in example 2***************************************
-//void vTaskFunction( void *pvParameters )
+//************************Used in example 2, 7***************************************
+void vTaskFunction( void *pvParameters )
+{
+	char *pcTaskName;
+	const TickType_t xDelay250ms = pdMS_TO_TICKS( 250 );
+	/* The string to print out is passed in via the parameter. Cast this to a
+	character pointer. */
+	pcTaskName = ( char * ) pvParameters;
+
+    sprintf(buffer,"%s\n\r", pcTaskName);
+	/* As per most tasks, this task is implemented in an infinite loop. */
+	for( ;; )
+	{
+		/* Print out the name of this task. */
+		HAL_UART_Transmit(&huart2, (uint8_t *)buffer, sizeof(buffer), 1000);
+		/* Delay for a period. */
+		vTaskDelay(xDelay250ms);
+	}
+}
+
+//************************Used in example 6****************************************
+//void vContinuousProcessingTask( void *pvParameters )
 //{
 //	char *pcTaskName;
 //	/* The string to print out is passed in via the parameter. Cast this to a
 //	character pointer. */
 //	pcTaskName = ( char * ) pvParameters;
+//	sprintf(buffer,"%s", pcTaskName);
+//	/* As per most tasks, this task is implemented in an infinite loop. */
+//	for( ;; )
+//	{
+//			/* Print out the name of this task. This task just does this repeatedly
+//			without ever blocking or delaying. */
+//		HAL_UART_Transmit(&huart2, (uint8_t *)buffer, sizeof(buffer), 1000);
+//	}
+//}
 //
-//    sprintf(buffer,"%s", pcTaskName);
+//void vPeriodicTask( void *pvParameters )
+//{
+//	TickType_t xLastWakeTime;
+//	const TickType_t xDelay3ms = pdMS_TO_TICKS( 3 );
+//	/* The xLastWakeTime variable needs to be initialized with the current tick
+//	count. Note that this is the only time the variable is explicitly written to.
+//	After this xLastWakeTime is managed automatically by the vTaskDelayUntil()
+//	API function. */
+//	xLastWakeTime = xTaskGetTickCount();
 //	/* As per most tasks, this task is implemented in an infinite loop. */
 //	for( ;; )
 //	{
 //		/* Print out the name of this task. */
-//		//vPrintString( pcTaskName );
-//		HAL_UART_Transmit(&huart2, (uint8_t *)buffer, sizeof(buffer), 1000);
-//		/* Delay for a period. */
-//		vTaskDelay(250);
+//		HAL_UART_Transmit(&huart2, (uint8_t *)"PeriodicTask is running\n\r", sizeof("PeriodicTask is running\n\r"), 1000);
+//		/* The task should execute every 3 milliseconds exactly – see the
+//		declaration of xDelay3ms in this function. */
+//		vTaskDelayUntil( &xLastWakeTime, xDelay3ms );
 //	}
 //}
-
-//************************Used in example 6****************************************
-void vContinuousProcessingTask( void *pvParameters )
-{
-	char *pcTaskName;
-	/* The string to print out is passed in via the parameter. Cast this to a
-	character pointer. */
-	pcTaskName = ( char * ) pvParameters;
-	sprintf(buffer,"%s", pcTaskName);
-	/* As per most tasks, this task is implemented in an infinite loop. */
-	for( ;; )
-	{
-			/* Print out the name of this task. This task just does this repeatedly
-			without ever blocking or delaying. */
-		HAL_UART_Transmit(&huart2, (uint8_t *)buffer, sizeof(buffer), 1000);
-	}
-}
-
-void vPeriodicTask( void *pvParameters )
-{
-	TickType_t xLastWakeTime;
-	const TickType_t xDelay3ms = pdMS_TO_TICKS( 3 );
-	/* The xLastWakeTime variable needs to be initialized with the current tick
-	count. Note that this is the only time the variable is explicitly written to.
-	After this xLastWakeTime is managed automatically by the vTaskDelayUntil()
-	API function. */
-	xLastWakeTime = xTaskGetTickCount();
-	/* As per most tasks, this task is implemented in an infinite loop. */
-	for( ;; )
-	{
-		/* Print out the name of this task. */
-		HAL_UART_Transmit(&huart2, (uint8_t *)"PeriodicTask is running\n\r", sizeof("PeriodicTask is running\n\r"), 1000);
-		/* The task should execute every 3 milliseconds exactly – see the
-		declaration of xDelay3ms in this function. */
-		vTaskDelayUntil( &xLastWakeTime, xDelay3ms );
-	}
-}
 /**
   * @brief  This function is executed in case of error occurrence.
   * @retval None
