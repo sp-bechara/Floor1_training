@@ -33,6 +33,8 @@
 #ifdef SPI
 #include <string.h>
 #endif //#ifdef SPI
+
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -469,7 +471,6 @@ int main(void)
 //  /* definition and creation of Task02 */
   osThreadDef(Task02, StartTask02, osPriorityHigh, 0, 128);
   Task02Handle = osThreadCreate(osThread(Task02), NULL);
-
 
 
   /* USER CODE BEGIN RTOS_THREADS */
@@ -1041,11 +1042,18 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
 void StartTask01(void const * argument)
 {
   /* USER CODE BEGIN 5 */
+	TickType_t xLastWakeTime;
+
+	/* The xLastWakeTime variable needs to be initialized with the current tick
+	count. Note that this is the only time the variable is written to explicitly.
+	After this xLastWakeTime is automatically updated within vTaskDelayUntil(). */
+	xLastWakeTime = xTaskGetTickCount();
   /* Infinite loop */
   for(;;)
   {
 	HAL_UART_Transmit(&huart2, (uint8_t *)"TASK-1 is running \n\r", sizeof("TASK-1 is running \n\r"), 1000);
-    osDelay(1);
+
+	osDelayUntil(&xLastWakeTime, 250);
   }
   /* USER CODE END 5 */
 }
@@ -1060,11 +1068,18 @@ void StartTask01(void const * argument)
 void StartTask02(void const * argument)
 {
   /* USER CODE BEGIN StartTask02 */
+	TickType_t xLastWakeTime;
+
+	/* The xLastWakeTime variable needs to be initialized with the current tick
+	count. Note that this is the only time the variable is written to explicitly.
+	After this xLastWakeTime is automatically updated within vTaskDelayUntil(). */
+	xLastWakeTime = xTaskGetTickCount();
   /* Infinite loop */
   for(;;)
   {
 	HAL_UART_Transmit(&huart2, (uint8_t *)"TASK-2 is running \n\r", sizeof("TASK-2 is running \n\r"), 1000);
-    osDelay(1);
+
+	osDelayUntil(&xLastWakeTime, 250);
   }
   /* USER CODE END StartTask02 */
 }
