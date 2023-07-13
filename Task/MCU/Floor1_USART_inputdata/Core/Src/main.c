@@ -1045,7 +1045,7 @@ void StartTask01(void const * argument)
   for(;;)
   {
 	HAL_UART_Transmit(&huart2, (uint8_t *)"TASK-1 is running \n\r", sizeof("TASK-1 is running \n\r"), 1000);
-    //osDelay(1);
+    osDelay(1);
   }
   /* USER CODE END 5 */
 }
@@ -1064,7 +1064,7 @@ void StartTask02(void const * argument)
   for(;;)
   {
 	HAL_UART_Transmit(&huart2, (uint8_t *)"TASK-2 is running \n\r", sizeof("TASK-2 is running \n\r"), 1000);
-    //osDelay(1);
+    osDelay(1);
   }
   /* USER CODE END StartTask02 */
 }
