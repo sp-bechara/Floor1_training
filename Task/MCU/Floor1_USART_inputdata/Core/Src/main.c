@@ -176,6 +176,7 @@ uint8_t userBuffer[BUFFER_SIZE];
 #endif //#ifdef SPI
 
 char buffer[20];
+//************************Used in example 7****************************************
 /* Declare a variable that will be incremented by the hook function. */
 volatile uint32_t ulIdleCycleCount = 0UL;
 /* USER CODE END PV */
@@ -193,11 +194,14 @@ static void MX_SPI1_Init(void);
 //************************Used in example 1,3,4,5****************************************
 //void StartTask01(void const * argument);
 //Svoid StartTask02(void const * argument);
-//************************Used in example 2****************************************
-void vTaskFunction( void *pvParameters );
+//************************Used in example 2, 7****************************************
+//void vTaskFunction( void *pvParameters );
 //************************Used in example 6****************************************
 //void vContinuousProcessingTask( void *pvParameters );
 //void vPeriodicTask( void *pvParameters );
+//************************Used in example 8, 9****************************************
+void vTask1( void *pvParameters );
+void vTask2( void *pvParameters );
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -382,10 +386,10 @@ executing. */
 //static const char *pcTextForTask2 = "vContinuousProcessingTask 2 is running\r\n";
 
 //************************Used in example 2,7****************************************
-static const char *pcTextForTask1 = "Task 1 is running\r\n";
-static const char *pcTextForTask2 = "Task 2 is running\r\n";
+//static const char *pcTextForTask1 = "Task 1 is running\r\n";
+//static const char *pcTextForTask2 = "Task 2 is running\r\n";
 
-//************************Used in example 7****************************************
+//************************Used in example 7, 8****************************************
 /* Idle hook functions MUST be called vApplicationIdleHook(), take no parameters,
 and return void. */
 void vApplicationIdleHook( void )
@@ -394,6 +398,9 @@ void vApplicationIdleHook( void )
 	ulIdleCycleCount++;
 }
 
+//************************Used in example 8****************************************
+/* Declare a variable that is used to hold the handle of Task 2. */
+//TaskHandle_t xTask2Handle = NULL;
 /* USER CODE END 0 */
 
 /**
@@ -780,28 +787,49 @@ int main(void)
 
    //************************Used in example 2****************************************
   /* Create one of the two tasks. */
-  xTaskCreate( vTaskFunction, /* Pointer to the function that
-  	  	  	  	  	  	  	  implements the task. */
-		  	  	  "Task 1", /* Text name for the task. This is to
-  	  	  	  	  	  	  	  facilitate debugging only. */
-				  1000, /* Stack depth - small microcontrollers
-  	  	  	  	  	  	  will use much less stack than this. */
-				  (void*)pcTextForTask1, /* Pass the text to be printed into the
-  	  	  	  	  	  	  	  	  	  	  task using the task parameter. */
-				  1, /* This task will run at priority 1. */
-				  NULL ); /* The task handle is not used in this
-  example. */
-  /* Create the other task in exactly the same way. Note this time that multiple
-  tasks are being created from the SAME task implementation (vTaskFunction). Only
-  the value passed in the parameter is different. Two instances of the same
-  task are being created. */
-  xTaskCreate( vTaskFunction, "Task 2", 1000, (void*)pcTextForTask2, 2, NULL );
+//  xTaskCreate( vTaskFunction, /* Pointer to the function that
+//  	  	  	  	  	  	  	  implements the task. */
+//		  	  	  "Task 1", /* Text name for the task. This is to
+//  	  	  	  	  	  	  	  facilitate debugging only. */
+//				  1000, /* Stack depth - small microcontrollers
+//  	  	  	  	  	  	  will use much less stack than this. */
+//				  (void*)pcTextForTask1, /* Pass the text to be printed into the
+//  	  	  	  	  	  	  	  	  	  	  task using the task parameter. */
+//				  1, /* This task will run at priority 1. */
+//				  NULL ); /* The task handle is not used in this
+//  example. */
+//  /* Create the other task in exactly the same way. Note this time that multiple
+//  tasks are being created from the SAME task implementation (vTaskFunction). Only
+//  the value passed in the parameter is different. Two instances of the same
+//  task are being created. */
+//  xTaskCreate( vTaskFunction, "Task 2", 1000, (void*)pcTextForTask2, 2, NULL );
 
    //************************Used in example 6****************************************
 
 //     xTaskCreate(vContinuousProcessingTask, "Task 1", 1000, (void*)pcTextForTask1, 1, NULL );
 //     xTaskCreate(vContinuousProcessingTask, "Task 2", 1000, (void*)pcTextForTask2, 1, NULL );
 //     xTaskCreate(vPeriodicTask, "Task 3", 1000, NULL, 2, NULL );
+
+   //************************Used in example 8****************************************
+
+   /* Create the first task at priority 2. The task parameter is not used
+   and set to NULL. The task handle is also not used so is also set to NULL. */
+   //xTaskCreate( vTask1, "Task 1", 1000, NULL, 2, NULL );
+   /* The task is created at priority 2 ______^. */
+   /* Create the second task at priority 1 - which is lower than the priority
+   given to Task 1. Again the task parameter is not used so is set to NULL -
+   BUT this time the task handle is required so the address of xTask2Handle
+   is passed in the last parameter. */
+   //xTaskCreate( vTask2, "Task 2", 1000, NULL, 1, &xTask2Handle );
+   /* The task handle is the last parameter _____^^^^^^^^^^^^^ */
+
+   //************************Used in example 9****************************************
+   /* Create the first task at priority 1. The task parameter is not used
+   so is set to NULL. The task handle is also not used so likewise is set
+   to NULL. */
+   xTaskCreate( vTask1, "Task 1", 1000, NULL, 1, NULL );
+   /* The task is created at priority 1 ______^. */
+
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -1144,24 +1172,24 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
 //}
 
 //************************Used in example 2, 7***************************************
-void vTaskFunction( void *pvParameters )
-{
-	char *pcTaskName;
-	const TickType_t xDelay250ms = pdMS_TO_TICKS( 250 );
-	/* The string to print out is passed in via the parameter. Cast this to a
-	character pointer. */
-	pcTaskName = ( char * ) pvParameters;
-
-    sprintf(buffer,"%s\n\r", pcTaskName);
-	/* As per most tasks, this task is implemented in an infinite loop. */
-	for( ;; )
-	{
-		/* Print out the name of this task. */
-		HAL_UART_Transmit(&huart2, (uint8_t *)buffer, sizeof(buffer), 1000);
-		/* Delay for a period. */
-		vTaskDelay(xDelay250ms);
-	}
-}
+//void vTaskFunction( void *pvParameters )
+//{
+//	char *pcTaskName;
+//	const TickType_t xDelay250ms = pdMS_TO_TICKS( 250 );
+//	/* The string to print out is passed in via the parameter. Cast this to a
+//	character pointer. */
+//	pcTaskName = ( char * ) pvParameters;
+//
+//    sprintf(buffer,"%s\n\r", pcTaskName);
+//	/* As per most tasks, this task is implemented in an infinite loop. */
+//	for( ;; )
+//	{
+//		/* Print out the name of this task. */
+//		HAL_UART_Transmit(&huart2, (uint8_t *)buffer, sizeof(buffer), 1000);
+//		/* Delay for a period. */
+//		vTaskDelay(xDelay250ms);
+//	}
+//}
 
 //************************Used in example 6****************************************
 //void vContinuousProcessingTask( void *pvParameters )
@@ -1199,6 +1227,91 @@ void vTaskFunction( void *pvParameters )
 //		vTaskDelayUntil( &xLastWakeTime, xDelay3ms );
 //	}
 //}
+
+//************************Used in example 8****************************************
+//void vTask1( void *pvParameters )
+//{
+//	UBaseType_t uxPriority;
+//	/* This task will always run before Task 2 as it is created with the higher
+//	priority. Neither Task 1 nor Task 2 ever block so both will always be in
+//	either the Running or the Ready state.
+//	Query the priority at which this task is running - passing in NULL means
+//	"return the calling task’s priority". */
+//	uxPriority = uxTaskPriorityGet( NULL );
+//	for( ;; )
+//	{
+//		/* Print out the name of this task. */
+//		HAL_UART_Transmit(&huart2, (uint8_t *)"Task 1 is running\r\n", sizeof("Task 1 is running\r\n"), 1000);
+//		/* Setting the Task 2 priority above the Task 1 priority will cause
+//	Task 2 to immediately start running (as then Task 2 will have the higher
+//	priority of the two created tasks). Note the use of the handle to task
+//	2 (xTask2Handle) in the call to vTaskPrioritySet(). Listing 35 shows how
+//	the handle was obtained. */
+//		HAL_UART_Transmit(&huart2, (uint8_t *)"About to raise the Task 2 priority\r\n", sizeof("About to raise the Task 2 priority\r\n"), 1000);
+//		vTaskPrioritySet( xTask2Handle, ( uxPriority + 1 ) );
+//		/* Task 1 will only run when it has a priority higher than Task 2.
+//	Therefore, for this task to reach this point, Task 2 must already have
+//	executed and set its priority back down to below the priority of this
+//	task. */
+//	}
+//}
+//
+//void vTask2( void *pvParameters )
+//{
+//	UBaseType_t uxPriority;
+//	/* Task 1 will always run before this task as Task 1 is created with the
+//	higher priority. Neither Task 1 nor Task 2 ever block so will always be
+//	in either the Running or the Ready state.
+//	Query the priority at which this task is running - passing in NULL means
+//	"return the calling task’s priority". */
+//	uxPriority = uxTaskPriorityGet( NULL );
+//	for( ;; )
+//	{
+//		/* For this task to reach this point Task 1 must have already run and
+//	set the priority of this task higher than its own.
+//	Print out the name of this task. */
+//		HAL_UART_Transmit(&huart2, (uint8_t *) "Task 2 is running\r\n", sizeof( "Task 2 is running\r\n"), 1000);
+//
+//		/* Set the priority of this task back down to its original value.
+//	Passing in NULL as the task handle means "change the priority of the
+//	calling task". Setting the priority below that of Task 1 will cause
+//	Task 1 to immediately start running again – pre-empting this task. */
+//		HAL_UART_Transmit(&huart2, (uint8_t *)"About to lower the Task 2 priority\r\n", sizeof("About to lower the Task 2 priority\r\n"), 1000);
+//
+//		vTaskPrioritySet( NULL, ( uxPriority - 2 ) );
+//	}
+//}
+
+//************************Used in example 9****************************************
+TaskHandle_t xTask2Handle = NULL;
+void vTask1( void *pvParameters )
+{
+	const TickType_t xDelay100ms = pdMS_TO_TICKS( 100UL );
+	for( ;; )
+	{
+		/* Print out the name of this task. */
+		HAL_UART_Transmit(&huart2, (uint8_t *)"Task 1 is running\r\n", sizeof("Task 1 is running\r\n"), 1000);
+		/* Create task 2 at a higher priority. Again the task parameter is not
+		used so is set to NULL - BUT this time the task handle is required so
+		the address of xTask2Handle is passed as the last parameter. */
+		xTaskCreate( vTask2, "Task 2", 1000, NULL, 2, &xTask2Handle );
+		/* The task handle is the last parameter _____^^^^^^^^^^^^^ */
+		/* Task 2 has/had the higher priority, so for Task 1 to reach here Task 2
+		must have already executed and deleted itself. Delay for 100
+		milliseconds. */
+		vTaskDelay( xDelay100ms );
+	}
+}
+
+void vTask2( void *pvParameters )
+{
+	/* Task 2 does nothing but delete itself. To do this it could call vTaskDelete()
+	using NULL as the parameter, but instead, and purely for demonstration purposes,
+	it calls vTaskDelete() passing its own task handle. */
+	HAL_UART_Transmit(&huart2, (uint8_t *)"Task 2 is running and about to delete itself\r\n", sizeof("Task 2 is running and about to delete itself\r\n"), 1000);
+	vTaskDelete( xTask2Handle );
+}
+
 /**
   * @brief  This function is executed in case of error occurrence.
   * @retval None
