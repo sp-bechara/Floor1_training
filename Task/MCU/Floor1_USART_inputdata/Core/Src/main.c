@@ -188,10 +188,14 @@ static void MX_WWDG_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_ADC1_Init(void);
 static void MX_SPI1_Init(void);
-void StartTask01(void const * argument);
-void StartTask02(void const * argument);
-void vTaskFunction( void *pvParameters );
-
+//************************Used in example 1,3,4,5****************************************
+//void StartTask01(void const * argument);
+//Svoid StartTask02(void const * argument);
+//************************Used in example 2****************************************
+//void vTaskFunction( void *pvParameters );
+//************************Used in example 6****************************************
+void vContinuousProcessingTask( void *pvParameters );
+void vPeriodicTask( void *pvParameters );
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -370,8 +374,8 @@ void flashMemoryReadAT45DB081E(uint32_t address, uint8_t* userBuffer, int readRa
 /* Define the strings that will be passed in as the task parameters. These are
 defined const and not on the stack to ensure they remain valid when the tasks are
 executing. */
-static const char *pcTextForTask1 = "Task 1 is running\r\n";
-static const char *pcTextForTask2 = "Task 2 is running\r\n";
+static const char *pcTextForTask1 = "vContinuousProcessingTask 1 is running\r\n";
+static const char *pcTextForTask2 = "vContinuousProcessingTask 2 is running\r\n";
 /* USER CODE END 0 */
 
 /**
@@ -474,6 +478,8 @@ int main(void)
   /* USER CODE END RTOS_QUEUES */
 
   /* Create the thread(s) */
+
+   //************************Used in example 1,3,4,5****************************************
   /* definition and creation of Task01 */
 //  osThreadDef(Task01, StartTask01, osPriorityNormal, 0, 128);
 //  Task01Handle = osThreadCreate(osThread(Task01), NULL);
@@ -482,25 +488,30 @@ int main(void)
 //  osThreadDef(Task02, StartTask02, osPriorityHigh, 0, 128);
 //  Task02Handle = osThreadCreate(osThread(Task02), NULL);
 
+   //************************Used in example 2****************************************
+//  /* Create one of the two tasks. */
+//  xTaskCreate( vTaskFunction, /* Pointer to the function that
+//  	  	  	  	  	  	  	  implements the task. */
+//		  	  	  "Task 1", /* Text name for the task. This is to
+//  	  	  	  	  	  	  	  facilitate debugging only. */
+//				  1000, /* Stack depth - small microcontrollers
+//  	  	  	  	  	  	  will use much less stack than this. */
+//				  (void*)pcTextForTask1, /* Pass the text to be printed into the
+//  	  	  	  	  	  	  	  	  	  	  task using the task parameter. */
+//				  1, /* This task will run at priority 1. */
+//				  NULL ); /* The task handle is not used in this
+//  example. */
+//  /* Create the other task in exactly the same way. Note this time that multiple
+//  tasks are being created from the SAME task implementation (vTaskFunction). Only
+//  the value passed in the parameter is different. Two instances of the same
+//  task are being created. */
+//  xTaskCreate( vTaskFunction, "Task 2", 1000, (void*)pcTextForTask2, 2, NULL );
 
-  /* Create one of the two tasks. */
-  xTaskCreate( vTaskFunction, /* Pointer to the function that
-  	  	  	  	  	  	  	  implements the task. */
-		  	  	  "Task 1", /* Text name for the task. This is to
-  	  	  	  	  	  	  	  facilitate debugging only. */
-				  1000, /* Stack depth - small microcontrollers
-  	  	  	  	  	  	  will use much less stack than this. */
-				  (void*)pcTextForTask1, /* Pass the text to be printed into the
-  	  	  	  	  	  	  	  	  	  	  task using the task parameter. */
-				  1, /* This task will run at priority 1. */
-				  NULL ); /* The task handle is not used in this
-  example. */
-  /* Create the other task in exactly the same way. Note this time that multiple
-  tasks are being created from the SAME task implementation (vTaskFunction). Only
-  the value passed in the parameter is different. Two instances of the same
-  task are being created. */
-  xTaskCreate( vTaskFunction, "Task 2", 1000, (void*)pcTextForTask2, 2, NULL );
+   //************************Used in example 6****************************************
 
+     xTaskCreate(vContinuousProcessingTask, "Task 1", 1000, (void*)pcTextForTask1, 1, NULL );
+     xTaskCreate(vContinuousProcessingTask, "Task 2", 1000, (void*)pcTextForTask2, 1, NULL );
+     xTaskCreate(vPeriodicTask, "Task 3", 1000, NULL, 2, NULL );
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -1061,6 +1072,7 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
 #endif //#ifdef ADC_IT
 /* USER CODE END 4 */
 
+//************************Used in example 1,3,4,5****************************************
 /* USER CODE BEGIN Header_StartTask01 */
 /**
   * @brief  Function implementing the Task01 thread.
@@ -1113,22 +1125,60 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
 //  /* USER CODE END StartTask02 */
 //}
 
-void vTaskFunction( void *pvParameters )
+//************************Used in example 2***************************************
+//void vTaskFunction( void *pvParameters )
+//{
+//	char *pcTaskName;
+//	/* The string to print out is passed in via the parameter. Cast this to a
+//	character pointer. */
+//	pcTaskName = ( char * ) pvParameters;
+//
+//    sprintf(buffer,"%s", pcTaskName);
+//	/* As per most tasks, this task is implemented in an infinite loop. */
+//	for( ;; )
+//	{
+//		/* Print out the name of this task. */
+//		//vPrintString( pcTaskName );
+//		HAL_UART_Transmit(&huart2, (uint8_t *)buffer, sizeof(buffer), 1000);
+//		/* Delay for a period. */
+//		vTaskDelay(250);
+//	}
+//}
+
+//************************Used in example 6****************************************
+void vContinuousProcessingTask( void *pvParameters )
 {
 	char *pcTaskName;
 	/* The string to print out is passed in via the parameter. Cast this to a
 	character pointer. */
 	pcTaskName = ( char * ) pvParameters;
+	sprintf(buffer,"%s", pcTaskName);
+	/* As per most tasks, this task is implemented in an infinite loop. */
+	for( ;; )
+	{
+			/* Print out the name of this task. This task just does this repeatedly
+			without ever blocking or delaying. */
+		HAL_UART_Transmit(&huart2, (uint8_t *)buffer, sizeof(buffer), 1000);
+	}
+}
 
-    sprintf(buffer,"%s", pcTaskName);
+void vPeriodicTask( void *pvParameters )
+{
+	TickType_t xLastWakeTime;
+	const TickType_t xDelay3ms = pdMS_TO_TICKS( 3 );
+	/* The xLastWakeTime variable needs to be initialized with the current tick
+	count. Note that this is the only time the variable is explicitly written to.
+	After this xLastWakeTime is managed automatically by the vTaskDelayUntil()
+	API function. */
+	xLastWakeTime = xTaskGetTickCount();
 	/* As per most tasks, this task is implemented in an infinite loop. */
 	for( ;; )
 	{
 		/* Print out the name of this task. */
-		//vPrintString( pcTaskName );
-		HAL_UART_Transmit(&huart2, (uint8_t *)buffer, sizeof(buffer), 1000);
-		/* Delay for a period. */
-		vTaskDelay(250);
+		HAL_UART_Transmit(&huart2, (uint8_t *)"PeriodicTask is running\n\r", sizeof("PeriodicTask is running\n\r"), 1000);
+		/* The task should execute every 3 milliseconds exactly – see the
+		declaration of xDelay3ms in this function. */
+		vTaskDelayUntil( &xLastWakeTime, xDelay3ms );
 	}
 }
 /**
