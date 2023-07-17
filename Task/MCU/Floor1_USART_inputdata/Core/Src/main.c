@@ -193,8 +193,7 @@ static void MX_I2C1_Init(void);
 static void MX_ADC1_Init(void);
 static void MX_SPI1_Init(void);
 /* USER CODE BEGIN PFP */
-static void prvOneShotTimerCallback( TimerHandle_t xTimer );
-static void prvAutoReloadTimerCallback( TimerHandle_t xTimer );
+static void prvTimerCallback( TimerHandle_t xTimer );
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -773,32 +772,24 @@ int main(void)
    TimerHandle_t xAutoReloadTimer, xOneShotTimer;
    BaseType_t xTimer1Started, xTimer2Started;
 
-   /* Create the one shot timer, storing the handle to the created timer in xOneShotTimer. */
-   xOneShotTimer = xTimerCreate(
-		   	   	   	   	   	   /* Text name for the software timer - not used by FreeRTOS. */
-		   	   	   	   	   	   "OneShot",
-							   /* The software timer's period in ticks. */
-							   mainONE_SHOT_TIMER_PERIOD,
-							   /* Setting uxAutoRealod to pdFALSE creates a one-shot software timer. */
-							   pdFALSE,
-							   /* This example does not use the timer id. */
-							   0,
-							   /* The callback function to be used by the software timer being created. */
-							   prvOneShotTimerCallback
-							   );
-   /* Create the auto-reload timer, storing the handle to the created timer in xAutoReloadTimer. */
-   xAutoReloadTimer = xTimerCreate(
-								   /* Text name for the software timer - not used by FreeRTOS. */
-								   "AutoReload",
-								   /* The software timer's period in ticks. */
-								   mainAUTO_RELOAD_TIMER_PERIOD,
-								   /* Setting uxAutoRealod to pdTRUE creates an auto-reload timer. */
-								   pdTRUE,
-								   /* This example does not use the timer id. */
+   /* Create the one shot timer software timer, storing the handle in xOneShotTimer. */
+   xOneShotTimer = xTimerCreate( "OneShot",
+								   mainONE_SHOT_TIMER_PERIOD,
+								   pdFALSE,
+								   /* The timer’s ID is initialized to 0. */
 								   0,
-								   /* The callback function to be used by the software timer being created. */
-								   prvAutoReloadTimerCallback
+								   /* prvTimerCallback() is used by both timers. */
+								   prvTimerCallback
 								   );
+   /* Create the auto-reload software timer, storing the handle in xAutoReloadTimer */
+   xAutoReloadTimer = xTimerCreate( "AutoReload",
+									   mainAUTO_RELOAD_TIMER_PERIOD,
+									   pdTRUE,
+									   /* The timer’s ID is initialized to 0. */
+									   0,
+									   /* prvTimerCallback() is used by both timers. */
+									   prvTimerCallback
+									   );
 
    if( ( xOneShotTimer != NULL ) && ( xAutoReloadTimer != NULL ) )
    {
@@ -1100,36 +1091,44 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
 }
 #endif //#ifdef ADC_IT
 
-static void prvOneShotTimerCallback( TimerHandle_t xTimer )
+static void prvTimerCallback( TimerHandle_t xTimer )
 {
 		TickType_t xTimeNow;
+		uint32_t ulExecutionCount;
 		char buffer[50];
-		//uint8_t ulCallCount;
+		/* A count of the number of times this software timer has expired is stored in the timer's
+		ID. Obtain the ID, increment it, then save it as the new ID value. The ID is a void
+		pointer, so is cast to a uint32_t. */
+		ulExecutionCount = ( uint32_t ) pvTimerGetTimerID( xTimer );
+		ulExecutionCount++;
+		vTimerSetTimerID( xTimer, ( void * ) ulExecutionCount );
 		/* Obtain the current tick count. */
 		xTimeNow = xTaskGetTickCount();
-		/* Output a string to show the time at which the callback was executed. */
-		sprintf(buffer,"One-shot timer callback executing %ld\n\r", xTimeNow);
-		//vPrintStringAndNumber( "One-shot timer callback executing", xTimeNow );
-	      HAL_UART_Transmit(&huart2, (uint8_t *)buffer, sizeof(buffer), 1000);
-		/* File scope variable. */
-	      //ulCallCount++;
+		/* The handle of the one-shot timer was stored in xOneShotTimer when the timer was created.
+		Compare the handle passed into this function with xOneShotTimer to determine if it was the
+		one-shot or auto-reload timer that expired, then output a string to show the time at which
+		the callback was executed. */
+		if( xTimer == "xOneShotTimer" )
+		{
+			sprintf(buffer,"One-shot timer callback executing %ld\n\r", xTimeNow);
+			HAL_UART_Transmit(&huart2, (uint8_t *)buffer, sizeof(buffer), 1000);
+		}
+		else
+		{
+			/* xTimer did not equal xOneShotTimer, so it must have been the auto-reload timer that
+			expired. */
+			sprintf(buffer,"Auto-reload timer callback executing %ld\n\r", xTimeNow);
+			HAL_UART_Transmit(&huart2, (uint8_t *)buffer, sizeof(buffer), 1000);
+			if( ulExecutionCount == 5 )
+			{
+				/* Stop the auto-reload timer after it has executed 5 times. This callback function
+				executes in the context of the RTOS daemon task so must not call any functions that
+				might place the daemon task into the Blocked state. Therefore a block time of 0 is
+				used. */
+				xTimerStop( xTimer, 0 );
+			}
+		}
 }
-
-static void prvAutoReloadTimerCallback( TimerHandle_t xTimer )
-{
-		TickType_t xTimeNow;
-		char buffer[50];
-		//uint8_t ulCallCount;
-		/* Obtain the current tick count. */
-		//xTimeNow = uxTaskGetTickCount();
-		xTimeNow = xTaskGetTickCount();
-		/* Output a string to show the time at which the callback was executed. */
-		sprintf(buffer,"Auto-reload timer callback executing %ld\n\r", xTimeNow);
-	    HAL_UART_Transmit(&huart2, (uint8_t *)buffer, sizeof(buffer), 1000);
-		//vPrintStringAndNumber( "Auto-reload timer callback executing", xTimeNow );
-	    //ulCallCount++;
-}
-
 /* USER CODE END 4 */
 /**
   * @brief  This function is executed in case of error occurrence.
