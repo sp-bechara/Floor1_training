@@ -35,7 +35,7 @@
 #endif //#ifdef SPI
 
 #include "FreeRTOSConfig.h"
-
+#include "timers.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -97,6 +97,12 @@
     #error Invalid MEMORY_READ_ADDRESS value. It must be within the range of 0 to 4350.
 #endif
 #endif //#ifdef SPI
+
+/* The periods assigned to the one-shot and auto-reload timers are 3.333 second and half a second respectively. */
+#define mainONE_SHOT_TIMER_PERIOD pdMS_TO_TICKS( 3333 )
+#define mainAUTO_RELOAD_TIMER_PERIOD pdMS_TO_TICKS( 500 )
+
+
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
@@ -174,11 +180,6 @@ uint8_t memoryPageReadRx[262];
 uint8_t buffer[BUFFER_SIZE];
 uint8_t userBuffer[BUFFER_SIZE];
 #endif //#ifdef SPI
-
-char buffer[20];
-//************************Used in example 7****************************************
-/* Declare a variable that will be incremented by the hook function. */
-volatile uint32_t ulIdleCycleCount = 0UL;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -191,22 +192,9 @@ static void MX_WWDG_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_ADC1_Init(void);
 static void MX_SPI1_Init(void);
-//************************Used in example 1,3,4,5****************************************
-//void StartTask01(void const * argument);
-//Svoid StartTask02(void const * argument);
-//************************Used in example 2, 7****************************************
-//void vTaskFunction( void *pvParameters );
-//************************Used in example 6****************************************
-//void vContinuousProcessingTask( void *pvParameters );
-//void vPeriodicTask( void *pvParameters );
-//************************Used in example 8, 9****************************************
-//void vTask1( void *pvParameters );
-//void vTask2( void *pvParameters );
-//************************Used in example 10****************************************
-static void vSenderTask( void *pvParameters );
-static void vReceiverTask( void *pvParameters );
 /* USER CODE BEGIN PFP */
-
+static void prvOneShotTimerCallback( TimerHandle_t xTimer );
+static void prvAutoReloadTimerCallback( TimerHandle_t xTimer );
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -380,55 +368,30 @@ void flashMemoryReadAT45DB081E(uint32_t address, uint8_t* userBuffer, int readRa
 }
 #endif //#ifdef SPI
 
-/* Define the strings that will be passed in as the task parameters. These are
-defined const and not on the stack to ensure they remain valid when the tasks are
-executing. */
-
-//************************Used in example 6****************************************
-//static const char *pcTextForTask1 = "vContinuousProcessingTask 1 is running\r\n";
-//static const char *pcTextForTask2 = "vContinuousProcessingTask 2 is running\r\n";
-
-//************************Used in example 2,7****************************************
-//static const char *pcTextForTask1 = "Task 1 is running\r\n";
-//static const char *pcTextForTask2 = "Task 2 is running\r\n";
-
-//************************Used in example 7, 8****************************************
+/* Declare a variable that will be incremented by the hook function. */
+volatile uint32_t ulIdleCycleCount = 0UL;
 /* Idle hook functions MUST be called vApplicationIdleHook(), take no parameters,
 and return void. */
 void vApplicationIdleHook( void )
 {
 /* This hook function does nothing but increment a counter. */
-	ulIdleCycleCount++;
+ulIdleCycleCount++;
 }
 
-//************************Used in example 8****************************************
-/* Declare a variable that is used to hold the handle of Task 2. */
-//TaskHandle_t xTask2Handle = NULL;
+void vApplicationGetTimerTaskMemory( StaticTask_t **ppxTimerTaskTCBBuffer,
+                                     StackType_t **ppxTimerTaskStackBuffer,
+                                     uint32_t *pulTimerTaskStackSize )
+{
+    // Allocate memory for the timer task
+    static StaticTask_t xTimerTaskTCB;
+    static StackType_t uxTimerTaskStack[configTIMER_TASK_STACK_DEPTH];
 
-//************************Used in example 10****************************************
-/* Declare a variable of type QueueHandle_t. This is used to store the handle
-to the queue that is accessed by all three tasks. */
-QueueHandle_t xQueue;
+    // Assign the memory to the pointers
+    *ppxTimerTaskTCBBuffer = &xTimerTaskTCB;
+    *ppxTimerTaskStackBuffer = uxTimerTaskStack;
+    *pulTimerTaskStackSize = configTIMER_TASK_STACK_DEPTH;
+}
 
-//************************Used in example 11****************************************
-/* Define an enumerated type used to identify the source of the data. */
-typedef enum
-{
-	eSender1,
-	eSender2
-} DataSource_t;
-/* Define the structure type that will be passed on the queue. */
-typedef struct
-{
-	uint8_t ucValue;
-	DataSource_t eDataSource;
-} Data_t;
-/* Declare two variables of type Data_t that will be passed on the queue. */
-static const Data_t xStructsToSend[ 2 ] =
-{
-		{ 100, eSender1 }, /* Used by Sender1. */
-		{ 200, eSender2 } /* Used by Sender2. */
-};
 /* USER CODE END 0 */
 
 /**
@@ -732,11 +695,11 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_USART2_UART_Init();
-  MX_RTC_Init();
-  MX_IWDG_Init();
-  MX_WWDG_Init();
-  MX_I2C1_Init();
-  MX_ADC1_Init();
+  //MX_RTC_Init();
+  //MX_IWDG_Init();
+  //MX_WWDG_Init();
+  //MX_I2C1_Init();
+  //MX_ADC1_Init();
   MX_SPI1_Init();
   /* USER CODE BEGIN 2 */
 #ifdef I_W_D_G
@@ -784,6 +747,9 @@ int main(void)
 #ifdef ADC_IT
    HAL_ADC_Start_IT(&hadc1);
 #endif //#ifdef ADC_IT
+
+
+
   /* USER CODE END 2 */
 
   /* USER CODE BEGIN RTOS_MUTEX */
@@ -804,113 +770,56 @@ int main(void)
 
   /* Create the thread(s) */
 
-   //************************Used in example 1,3,4,5****************************************
-  /* definition and creation of Task01 */
-//  osThreadDef(Task01, StartTask01, osPriorityNormal, 0, 128);
-//  Task01Handle = osThreadCreate(osThread(Task01), NULL);
-//
-////  /* definition and creation of Task02 */
-//  osThreadDef(Task02, StartTask02, osPriorityHigh, 0, 128);
-//  Task02Handle = osThreadCreate(osThread(Task02), NULL);
+   TimerHandle_t xAutoReloadTimer, xOneShotTimer;
+   BaseType_t xTimer1Started, xTimer2Started;
 
-   //************************Used in example 2****************************************
-  /* Create one of the two tasks. */
-//  xTaskCreate( vTaskFunction, /* Pointer to the function that
-//  	  	  	  	  	  	  	  implements the task. */
-//		  	  	  "Task 1", /* Text name for the task. This is to
-//  	  	  	  	  	  	  	  facilitate debugging only. */
-//				  1000, /* Stack depth - small microcontrollers
-//  	  	  	  	  	  	  will use much less stack than this. */
-//				  (void*)pcTextForTask1, /* Pass the text to be printed into the
-//  	  	  	  	  	  	  	  	  	  	  task using the task parameter. */
-//				  1, /* This task will run at priority 1. */
-//				  NULL ); /* The task handle is not used in this
-//  example. */
-//  /* Create the other task in exactly the same way. Note this time that multiple
-//  tasks are being created from the SAME task implementation (vTaskFunction). Only
-//  the value passed in the parameter is different. Two instances of the same
-//  task are being created. */
-//  xTaskCreate( vTaskFunction, "Task 2", 1000, (void*)pcTextForTask2, 2, NULL );
+   /* Create the one shot timer, storing the handle to the created timer in xOneShotTimer. */
+   xOneShotTimer = xTimerCreate(
+		   	   	   	   	   	   /* Text name for the software timer - not used by FreeRTOS. */
+		   	   	   	   	   	   "OneShot",
+							   /* The software timer's period in ticks. */
+							   mainONE_SHOT_TIMER_PERIOD,
+							   /* Setting uxAutoRealod to pdFALSE creates a one-shot software timer. */
+							   pdFALSE,
+							   /* This example does not use the timer id. */
+							   0,
+							   /* The callback function to be used by the software timer being created. */
+							   prvOneShotTimerCallback
+							   );
+   /* Create the auto-reload timer, storing the handle to the created timer in xAutoReloadTimer. */
+   xAutoReloadTimer = xTimerCreate(
+								   /* Text name for the software timer - not used by FreeRTOS. */
+								   "AutoReload",
+								   /* The software timer's period in ticks. */
+								   mainAUTO_RELOAD_TIMER_PERIOD,
+								   /* Setting uxAutoRealod to pdTRUE creates an auto-reload timer. */
+								   pdTRUE,
+								   /* This example does not use the timer id. */
+								   0,
+								   /* The callback function to be used by the software timer being created. */
+								   prvAutoReloadTimerCallback
+								   );
 
-   //************************Used in example 6****************************************
-
-//     xTaskCreate(vContinuousProcessingTask, "Task 1", 1000, (void*)pcTextForTask1, 1, NULL );
-//     xTaskCreate(vContinuousProcessingTask, "Task 2", 1000, (void*)pcTextForTask2, 1, NULL );
-//     xTaskCreate(vPeriodicTask, "Task 3", 1000, NULL, 2, NULL );
-
-   //************************Used in example 8****************************************
-
-   /* Create the first task at priority 2. The task parameter is not used
-   and set to NULL. The task handle is also not used so is also set to NULL. */
-   //xTaskCreate( vTask1, "Task 1", 1000, NULL, 2, NULL );
-   /* The task is created at priority 2 ______^. */
-   /* Create the second task at priority 1 - which is lower than the priority
-   given to Task 1. Again the task parameter is not used so is set to NULL -
-   BUT this time the task handle is required so the address of xTask2Handle
-   is passed in the last parameter. */
-   //xTaskCreate( vTask2, "Task 2", 1000, NULL, 1, &xTask2Handle );
-   /* The task handle is the last parameter _____^^^^^^^^^^^^^ */
-
-   //************************Used in example 9****************************************
-   /* Create the first task at priority 1. The task parameter is not used
-   so is set to NULL. The task handle is also not used so likewise is set
-   to NULL. */
-//   xTaskCreate( vTask1, "Task 1", 1000, NULL, 1, NULL );
-   /* The task is created at priority 1 ______^. */
-
-   //************************Used in example 10****************************************
-
-//   /* The queue is created to hold a maximum of 5 values, each of which is
-//   large enough to hold a variable of type int32_t. */
-//   xQueue = xQueueCreate( 5, sizeof( int32_t ) );
-//   if( xQueue != NULL )
-//   {
-//	   /* Create two instances of the task that will send to the queue. The task
-//   	   parameter is used to pass the value that the task will write to the queue,
-//   	   so one task will continuously write 100 to the queue while the other task
-//   	   will continuously write 200 to the queue. Both tasks are created at
-//   	   priority 1. */
-//	   xTaskCreate( vSenderTask, "Sender1", 1000, ( void * ) 100, 1, NULL );
-//	   xTaskCreate( vSenderTask, "Sender2", 1000, ( void * ) 200, 1, NULL );
-//	   /* Create the task that will read from the queue. The task is created with
-//   	   priority 2, so above the priority of the sender tasks. */
-//	   xTaskCreate( vReceiverTask, "Receiver", 1000, NULL, 2, NULL );
-//	   /* Start the scheduler so the created tasks start executing. */
-//	   vTaskStartScheduler();
-//   }
-//   else
-//   {
-//	   /* The queue could not be created. */
-//   }
-
-   //************************Used in example 11****************************************
-   /* The queue is created to hold a maximum of 3 structures of type Data_t. */
-   xQueue = xQueueCreate( 3, sizeof( Data_t ) );
-   if( xQueue != NULL )
+   if( ( xOneShotTimer != NULL ) && ( xAutoReloadTimer != NULL ) )
    {
-   /* Create two instances of the task that will write to the queue. The
-   parameter is used to pass the structure that the task will write to the
-   queue, so one task will continuously send xStructsToSend[ 0 ] to the queue
-   while the other task will continuously send xStructsToSend[ 1 ]. Both
-   tasks are created at priority 2, which is above the priority of the receiver. */
-   xTaskCreate( vSenderTask, "Sender1", 1000, &( xStructsToSend[ 0 ] ), 2, NULL );
-   xTaskCreate( vSenderTask, "Sender2", 1000, &( xStructsToSend[ 1 ] ), 2, NULL );
-   /* Create the task that will read from the queue. The task is created with
-   priority 1, so below the priority of the sender tasks. */
-   xTaskCreate( vReceiverTask, "Receiver", 1000, NULL, 1, NULL );
-   /* Start the scheduler so the created tasks start executing. */
-   vTaskStartScheduler();
-   }
-   else
-   {
-   /* The queue could not be created. */
+		   /* Start the software timers, using a block time of 0 (no block time). The scheduler has
+		   not been started yet so any block time specified here would be ignored anyway. */
+		   xTimer1Started = xTimerStart( xOneShotTimer, 0 );
+		   xTimer2Started = xTimerStart( xAutoReloadTimer, 0 );
+		   /* The implementation of xTimerStart() uses the timer command queue, and xTimerStart()
+		   will fail if the timer command queue gets full. The timer service task does not get
+		   created until the scheduler is started, so all commands sent to the command queue will
+		   stay in the queue until after the scheduler has been started. Check both calls to
+		   xTimerStart() passed. */
+		   if( ( xTimer1Started == pdPASS ) && ( xTimer2Started == pdPASS ) )
+		   {
+			   	   /* Start the scheduler. */
+			   	   vTaskStartScheduler();
+		   }
    }
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
   /* USER CODE END RTOS_THREADS */
-
-//  /* Start scheduler */
-//  osKernelStart();
   /* We should never get here as control is now taken by the scheduler */
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
@@ -1190,366 +1099,38 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
     adcInterruptCheckFlag++;
 }
 #endif //#ifdef ADC_IT
+
+static void prvOneShotTimerCallback( TimerHandle_t xTimer )
+{
+		TickType_t xTimeNow;
+		char buffer[50];
+		//uint8_t ulCallCount;
+		/* Obtain the current tick count. */
+		xTimeNow = xTaskGetTickCount();
+		/* Output a string to show the time at which the callback was executed. */
+		sprintf(buffer,"One-shot timer callback executing %ld\n\r", xTimeNow);
+		//vPrintStringAndNumber( "One-shot timer callback executing", xTimeNow );
+	      HAL_UART_Transmit(&huart2, (uint8_t *)buffer, sizeof(buffer), 1000);
+		/* File scope variable. */
+	      //ulCallCount++;
+}
+
+static void prvAutoReloadTimerCallback( TimerHandle_t xTimer )
+{
+		TickType_t xTimeNow;
+		char buffer[50];
+		//uint8_t ulCallCount;
+		/* Obtain the current tick count. */
+		//xTimeNow = uxTaskGetTickCount();
+		xTimeNow = xTaskGetTickCount();
+		/* Output a string to show the time at which the callback was executed. */
+		sprintf(buffer,"Auto-reload timer callback executing %ld\n\r", xTimeNow);
+	    HAL_UART_Transmit(&huart2, (uint8_t *)buffer, sizeof(buffer), 1000);
+		//vPrintStringAndNumber( "Auto-reload timer callback executing", xTimeNow );
+	    //ulCallCount++;
+}
+
 /* USER CODE END 4 */
-
-//************************Used in example 1,3,4,5****************************************
-/* USER CODE BEGIN Header_StartTask01 */
-/**
-  * @brief  Function implementing the Task01 thread.
-  * @param  argument: Not used
-  * @retval None
-  */
-/* USER CODE END Header_StartTask01 */
-//void StartTask01(void const * argument)
-//{
-//  /* USER CODE BEGIN 5 */
-//	TickType_t xLastWakeTime;
-//
-//	/* The xLastWakeTime variable needs to be initialized with the current tick
-//	count. Note that this is the only time the variable is written to explicitly.
-//	After this xLastWakeTime is automatically updated within vTaskDelayUntil(). */
-//	xLastWakeTime = xTaskGetTickCount();
-//  /* Infinite loop */
-//  for(;;)
-//  {
-//	HAL_UART_Transmit(&huart2, (uint8_t *)"TASK-1 is running \n\r", sizeof("TASK-1 is running \n\r"), 1000);
-//
-//	osDelayUntil(&xLastWakeTime, 250);
-//  }
-//  /* USER CODE END 5 */
-//}
-//
-///* USER CODE BEGIN Header_StartTask02 */
-///**
-//* @brief Function implementing the Task02 thread.
-//* @param argument: Not used
-//* @retval None
-//*/
-///* USER CODE END Header_StartTask02 */
-//void StartTask02(void const * argument)
-//{
-//  /* USER CODE BEGIN StartTask02 */
-//	TickType_t xLastWakeTime;
-//
-//	/* The xLastWakeTime variable needs to be initialized with the current tick
-//	count. Note that this is the only time the variable is written to explicitly.
-//	After this xLastWakeTime is automatically updated within vTaskDelayUntil(). */
-//	xLastWakeTime = xTaskGetTickCount();
-//  /* Infinite loop */
-//  for(;;)
-//  {
-//	HAL_UART_Transmit(&huart2, (uint8_t *)"TASK-2 is running \n\r", sizeof("TASK-2 is running \n\r"), 1000);
-//
-//	osDelayUntil(&xLastWakeTime, 250);
-//  }
-//  /* USER CODE END StartTask02 */
-//}
-
-//************************Used in example 2, 7***************************************
-//void vTaskFunction( void *pvParameters )
-//{
-//	char *pcTaskName;
-//	const TickType_t xDelay250ms = pdMS_TO_TICKS( 250 );
-//	/* The string to print out is passed in via the parameter. Cast this to a
-//	character pointer. */
-//	pcTaskName = ( char * ) pvParameters;
-//
-//    sprintf(buffer,"%s\n\r", pcTaskName);
-//	/* As per most tasks, this task is implemented in an infinite loop. */
-//	for( ;; )
-//	{
-//		/* Print out the name of this task. */
-//		HAL_UART_Transmit(&huart2, (uint8_t *)buffer, sizeof(buffer), 1000);
-//		/* Delay for a period. */
-//		vTaskDelay(xDelay250ms);
-//	}
-//}
-
-//************************Used in example 6****************************************
-//void vContinuousProcessingTask( void *pvParameters )
-//{
-//	char *pcTaskName;
-//	/* The string to print out is passed in via the parameter. Cast this to a
-//	character pointer. */
-//	pcTaskName = ( char * ) pvParameters;
-//	sprintf(buffer,"%s", pcTaskName);
-//	/* As per most tasks, this task is implemented in an infinite loop. */
-//	for( ;; )
-//	{
-//			/* Print out the name of this task. This task just does this repeatedly
-//			without ever blocking or delaying. */
-//		HAL_UART_Transmit(&huart2, (uint8_t *)buffer, sizeof(buffer), 1000);
-//	}
-//}
-//
-//void vPeriodicTask( void *pvParameters )
-//{
-//	TickType_t xLastWakeTime;
-//	const TickType_t xDelay3ms = pdMS_TO_TICKS( 3 );
-//	/* The xLastWakeTime variable needs to be initialized with the current tick
-//	count. Note that this is the only time the variable is explicitly written to.
-//	After this xLastWakeTime is managed automatically by the vTaskDelayUntil()
-//	API function. */
-//	xLastWakeTime = xTaskGetTickCount();
-//	/* As per most tasks, this task is implemented in an infinite loop. */
-//	for( ;; )
-//	{
-//		/* Print out the name of this task. */
-//		HAL_UART_Transmit(&huart2, (uint8_t *)"PeriodicTask is running\n\r", sizeof("PeriodicTask is running\n\r"), 1000);
-//		/* The task should execute every 3 milliseconds exactly – see the
-//		declaration of xDelay3ms in this function. */
-//		vTaskDelayUntil( &xLastWakeTime, xDelay3ms );
-//	}
-//}
-
-//************************Used in example 8****************************************
-//void vTask1( void *pvParameters )
-//{
-//	UBaseType_t uxPriority;
-//	/* This task will always run before Task 2 as it is created with the higher
-//	priority. Neither Task 1 nor Task 2 ever block so both will always be in
-//	either the Running or the Ready state.
-//	Query the priority at which this task is running - passing in NULL means
-//	"return the calling task’s priority". */
-//	uxPriority = uxTaskPriorityGet( NULL );
-//	for( ;; )
-//	{
-//		/* Print out the name of this task. */
-//		HAL_UART_Transmit(&huart2, (uint8_t *)"Task 1 is running\r\n", sizeof("Task 1 is running\r\n"), 1000);
-//		/* Setting the Task 2 priority above the Task 1 priority will cause
-//	Task 2 to immediately start running (as then Task 2 will have the higher
-//	priority of the two created tasks). Note the use of the handle to task
-//	2 (xTask2Handle) in the call to vTaskPrioritySet(). Listing 35 shows how
-//	the handle was obtained. */
-//		HAL_UART_Transmit(&huart2, (uint8_t *)"About to raise the Task 2 priority\r\n", sizeof("About to raise the Task 2 priority\r\n"), 1000);
-//		vTaskPrioritySet( xTask2Handle, ( uxPriority + 1 ) );
-//		/* Task 1 will only run when it has a priority higher than Task 2.
-//	Therefore, for this task to reach this point, Task 2 must already have
-//	executed and set its priority back down to below the priority of this
-//	task. */
-//	}
-//}
-//
-//void vTask2( void *pvParameters )
-//{
-//	UBaseType_t uxPriority;
-//	/* Task 1 will always run before this task as Task 1 is created with the
-//	higher priority. Neither Task 1 nor Task 2 ever block so will always be
-//	in either the Running or the Ready state.
-//	Query the priority at which this task is running - passing in NULL means
-//	"return the calling task’s priority". */
-//	uxPriority = uxTaskPriorityGet( NULL );
-//	for( ;; )
-//	{
-//		/* For this task to reach this point Task 1 must have already run and
-//	set the priority of this task higher than its own.
-//	Print out the name of this task. */
-//		HAL_UART_Transmit(&huart2, (uint8_t *) "Task 2 is running\r\n", sizeof( "Task 2 is running\r\n"), 1000);
-//
-//		/* Set the priority of this task back down to its original value.
-//	Passing in NULL as the task handle means "change the priority of the
-//	calling task". Setting the priority below that of Task 1 will cause
-//	Task 1 to immediately start running again – pre-empting this task. */
-//		HAL_UART_Transmit(&huart2, (uint8_t *)"About to lower the Task 2 priority\r\n", sizeof("About to lower the Task 2 priority\r\n"), 1000);
-//
-//		vTaskPrioritySet( NULL, ( uxPriority - 2 ) );
-//	}
-//}
-
-//************************Used in example 9****************************************
-//TaskHandle_t xTask2Handle = NULL;
-//void vTask1( void *pvParameters )
-//{
-//	const TickType_t xDelay100ms = pdMS_TO_TICKS( 100UL );
-//	for( ;; )
-//	{
-//		/* Print out the name of this task. */
-//		HAL_UART_Transmit(&huart2, (uint8_t *)"Task 1 is running\r\n", sizeof("Task 1 is running\r\n"), 1000);
-//		/* Create task 2 at a higher priority. Again the task parameter is not
-//		used so is set to NULL - BUT this time the task handle is required so
-//		the address of xTask2Handle is passed as the last parameter. */
-//		xTaskCreate( vTask2, "Task 2", 1000, NULL, 2, &xTask2Handle );
-//		/* The task handle is the last parameter _____^^^^^^^^^^^^^ */
-//		/* Task 2 has/had the higher priority, so for Task 1 to reach here Task 2
-//		must have already executed and deleted itself. Delay for 100
-//		milliseconds. */
-//		vTaskDelay( xDelay100ms );
-//	}
-//}
-//
-//void vTask2( void *pvParameters )
-//{
-//	/* Task 2 does nothing but delete itself. To do this it could call vTaskDelete()
-//	using NULL as the parameter, but instead, and purely for demonstration purposes,
-//	it calls vTaskDelete() passing its own task handle. */
-//	HAL_UART_Transmit(&huart2, (uint8_t *)"Task 2 is running and about to delete itself\r\n", sizeof("Task 2 is running and about to delete itself\r\n"), 1000);
-//	vTaskDelete( xTask2Handle );
-//}
-
-//************************Used in example 10****************************************
-//static void vSenderTask( void *pvParameters )
-//{
-//	int32_t lValueToSend;
-//	BaseType_t xStatus;
-//	/* Two instances of this task are created so the value that is sent to the
-//	queue is passed in via the task parameter - this way each instance can use
-//	a different value. The queue was created to hold values of type int32_t,
-//	so cast the parameter to the required type. */
-//	lValueToSend = ( int32_t ) pvParameters;
-//	/* As per most tasks, this task is implemented within an infinite loop. */
-//	for( ;; )
-//	{
-//			/* Send the value to the queue.
-//			The first parameter is the queue to which data is being sent. The
-//			queue was created before the scheduler was started, so before this task
-//			started to execute.
-//			The second parameter is the address of the data to be sent, in this case
-//			the address of lValueToSend.
-//			The third parameter is the Block time – the time the task should be kept
-//			in the Blocked state to wait for space to become available on the queue
-//			should the queue already be full. In this case a block time is not
-//			specified because the queue should never contain more than one item, and
-//			therefore never be full. */
-//			xStatus = xQueueSendToBack( xQueue, &lValueToSend, 0 );
-//			if( xStatus != pdPASS )
-//			{
-//				/* The send operation could not complete because the queue was full -
-//				this must be an error as the queue should never contain more than
-//				one item! */
-//				HAL_UART_Transmit(&huart2, (uint8_t *)"Could not send to the queue.\r\n", sizeof("Could not send to the queue.\r\n"), 1000);
-//			}
-//	}
-//}
-//
-//static void vReceiverTask( void *pvParameters )
-//{
-//	/* Declare the variable that will hold the values received from the queue. */
-//	int32_t lReceivedValue;
-//	BaseType_t xStatus;
-//	char buffer[20];
-//	const TickType_t xTicksToWait = pdMS_TO_TICKS( 100 );
-//	/* This task is also defined within an infinite loop. */
-//	for( ;; )
-//	{
-//		/* This call should always find the queue empty because this task will
-//		immediately remove any data that is written to the queue. */
-//		if( uxQueueMessagesWaiting( xQueue ) != 0 )
-//		{
-//			HAL_UART_Transmit(&huart2, (uint8_t *)"Queue should have been empty!\r\n", sizeof("Queue should have been empty!\r\n"), 1000);
-//		}
-//		/* Receive data from the queue.
-//		The first parameter is the queue from which data is to be received. The
-//		queue is created before the scheduler is started, and therefore before this
-//		task runs for the first time.
-//		The second parameter is the buffer into which the received data will be
-//		placed. In this case the buffer is simply the address of a variable that
-//		has the required size to hold the received data.
-//		The last parameter is the block time – the maximum amount of time that the
-//		task will remain in the Blocked state to wait for data to be available
-//		should the queue already be empty. */
-//		xStatus = xQueueReceive( xQueue, &lReceivedValue, xTicksToWait );
-//		if( xStatus == pdPASS )
-//		{
-//			/* Data was successfully received from the queue, print out the received
-//			value. */
-//			//vPrintStringAndNumber( "Received = ", lReceivedValue );
-//			sprintf(buffer, "Recieved = %ld \n\r", lReceivedValue);
-//			HAL_UART_Transmit(&huart2, (uint8_t *)buffer, sizeof(buffer), 1000);
-//		}
-//		else
-//		{
-//			/* Data was not received from the queue even after waiting for 100ms.
-//			This must be an error as the sending tasks are free running and will be
-//			continuously writing to the queue. */
-//			HAL_UART_Transmit(&huart2, (uint8_t *)"Could not receive from the queue.\r\n", sizeof("Could not receive from the queue.\r\n"), 1000);
-//		}
-//	}
-//}
-
-//************************Used in example 11****************************************
-static void vSenderTask( void *pvParameters )
-{
-	BaseType_t xStatus;
-	const TickType_t xTicksToWait = pdMS_TO_TICKS( 100 );
-	/* As per most tasks, this task is implemented within an infinite loop. */
-	for( ;; )
-	{
-			/* Send to the queue.
-			The second parameter is the address of the structure being sent. The
-			address is passed in as the task parameter so pvParameters is used
-			directly.
-			The third parameter is the Block time - the time the task should be kept
-			in the Blocked state to wait for space to become available on the queue
-			if the queue is already full. A block time is specified because the
-			sending tasks have a higher priority than the receiving task so the queue
-			is expected to become full. The receiving task will remove items from
-			the queue when both sending tasks are in the Blocked state. */
-			xStatus = xQueueSendToBack( xQueue, pvParameters, xTicksToWait );
-			if( xStatus != pdPASS )
-			{
-			/* The send operation could not complete, even after waiting for 100ms.
-			This must be an error as the receiving task should make space in the
-			queue as soon as both sending tasks are in the Blocked state. */
-			HAL_UART_Transmit(&huart2, (uint8_t *)"Could not send to the queue.\r\n", sizeof("Could not send to the queue.\r\n"), 1000);
-			}
-	}
-}
-
-static void vReceiverTask( void *pvParameters )
-{
-	/* Declare the structure that will hold the values received from the queue. */
-	char buffer1[20];
-	char buffer2[20];
-	Data_t xReceivedStructure;
-	BaseType_t xStatus;
-	/* This task is also defined within an infinite loop. */
-	for( ;; )
-	{
-		/* Because it has the lowest priority this task will only run when the
-		sending tasks are in the Blocked state. The sending tasks will only enter
-		the Blocked state when the queue is full so this task always expects the
-		number of items in the queue to be equal to the queue length, which is 3 in
-		this case. */
-		if( uxQueueMessagesWaiting( xQueue ) != 3 )
-		{
-			HAL_UART_Transmit(&huart2, (uint8_t *)"Queue should have been full!\r\n", sizeof("Queue should have been full!\r\n"), 1000);
-		}
-		/* Receive from the queue.
-		The second parameter is the buffer into which the received data will be
-		placed. In this case the buffer is simply the address of a variable that
-		has the required size to hold the received structure.
-		The last parameter is the block time - the maximum amount of time that the
-		task will remain in the Blocked state to wait for data to be available
-		if the queue is already empty. In this case a block time is not necessary
-		because this task will only run when the queue is full. */
-		xStatus = xQueueReceive( xQueue, &xReceivedStructure, 0 );
-		if( xStatus == pdPASS )
-		{
-			/* Data was successfully received from the queue, print out the received
-			value and the source of the value. */
-			if( xReceivedStructure.eDataSource == eSender1 )
-			{
-				sprintf(buffer1, "From Sender 1 = %d \n\r", xReceivedStructure.ucValue);
-				HAL_UART_Transmit(&huart2, (uint8_t *)buffer1, sizeof(buffer1), 1000);
-				HAL_UART_Transmit(&huart2, (uint8_t *)"\n", sizeof("\n"), 1000);
-			}
-			else
-			{
-				sprintf(buffer2, "From Sender 2 = %d \n\r", xReceivedStructure.ucValue);
-				HAL_UART_Transmit(&huart2, (uint8_t *)buffer2, sizeof(buffer2), 1000);
-				HAL_UART_Transmit(&huart2, (uint8_t *)"\n", sizeof("\n"), 1000);
-			}
-		}
-		else
-		{
-		/* Nothing was received from the queue. This must be an error as this
-		task should only run when the queue is full. */
-		HAL_UART_Transmit(&huart2, (uint8_t *)"Could not receive from the queue.\r\n", sizeof("Could not receive from the queue.\r\n"), 1000);
-
-		}
-	}
-}
-
 /**
   * @brief  This function is executed in case of error occurrence.
   * @retval None

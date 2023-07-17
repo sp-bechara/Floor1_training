@@ -44,6 +44,9 @@
  *----------------------------------------------------------*/
 
 /* USER CODE BEGIN Includes */
+#define configTIMER_TASK_PRIORITY 1
+#define configTIMER_QUEUE_LENGTH 10
+#define configTIMER_TASK_STACK_DEPTH 1000
 /* Section where include file can be added */
 /* USER CODE END Includes */
 
