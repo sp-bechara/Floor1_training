@@ -410,7 +410,8 @@ void vApplicationGetTimerTaskMemory( StaticTask_t **ppxTimerTaskTCBBuffer,
 
 /* Declare a variable of type SemaphoreHandle_t.  This is used to reference the
 semaphore that is used to synchronize a task with an interrupt. */
-SemaphoreHandle_t xBinarySemaphore;
+SemaphoreHandle_t xCountingSemaphore;
+
 /* USER CODE END 0 */
 
 /**
@@ -518,30 +519,31 @@ int main(void)
   /* Create the thread(s) */
   /* definition and creation of Task01 */
    /* Before a semaphore is used it must be explicitly created.  In this
-  	example	a binary semaphore is created. */
-      xBinarySemaphore = xSemaphoreCreateBinary();
+	example a counting semaphore is created.  The semaphore is created to have a
+	maximum count value of 10, and an initial count value of 0. */
+	xCountingSemaphore = xSemaphoreCreateCounting( 10, 0 );
 
-  	/* Check the semaphore was created successfully. */
-  	if( xBinarySemaphore != NULL )
-  	{
-  		/* Create the 'handler' task, which is the task to which interrupt
-  		processing is deferred, and so is the task that will be synchronized
-  		with the interrupt.  The handler task is created with a high priority to
-  		ensure it runs immediately after the interrupt exits.  In this case a
-  		priority of 3 is chosen. */
-  		xTaskCreate( vHandlerTask, "Handler", 1000, NULL, 3, NULL );
+	/* Check the semaphore was created successfully. */
+	if( xCountingSemaphore != NULL )
+	{
+		/* Create the 'handler' task, which is the task to which interrupt
+		processing is deferred, and so is the task that will be synchronized
+		with the interrupt.  The handler task is created with a high priority to
+		ensure it runs immediately after the interrupt exits.  In this case a
+		priority of 3 is chosen. */
+		xTaskCreate( vHandlerTask, "Handler", 1000, NULL, 3, NULL );
 
-  		/* Create the task that will periodically generate a software interrupt.
-  		This is created with a priority below the handler task to ensure it will
-  		get preempted each time the handler task exits the Blocked state. */
-  		xTaskCreate( vPeriodicTask, "Periodic", 1000, NULL, 1, NULL );
+		/* Create the task that will periodically generate a software interrupt.
+		This is created with a priority below the handler task to ensure it will
+		get preempted each time the handler task exits the Blocked state. */
+		xTaskCreate( vPeriodicTask, "Periodic", 1000, NULL, 1, NULL );
 
-  		/* Install the handler for the software interrupt.  The syntax necessary
-  		to do this is dependent on the FreeRTOS port being used.  The syntax
-  		shown here can only be used with the FreeRTOS Windows port, where such
-  		interrupts are only simulated. */
-  		//vPortSetInterruptHandler( mainINTERRUPT_NUMBER, ulExampleInterruptHandler );
-  	}
+		/* Install the handler for the software interrupt.  The syntax necessary
+		to do this is dependent on the FreeRTOS port being used.  The syntax
+		shown here can only be used with the FreeRTOS Windows port, where such
+		interrupts are only simulated. */
+		//vPortSetInterruptHandler( mainINTERRUPT_NUMBER, ulExampleInterruptHandler );
+	}
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
   /* USER CODE END RTOS_THREADS */
@@ -1109,8 +1111,7 @@ static void vHandlerTask( void *pvParameters )
 		time.  The task blocks indefinitely meaning this function call will only
 		return once the semaphore has been successfully obtained - so there is
 		no need to check the returned value. */
-		xSemaphoreTake( xBinarySemaphore, portMAX_DELAY );
-
+		xSemaphoreTake( xCountingSemaphore, portMAX_DELAY );
 		/* To get here the event must have occurred.  Process the event (in this
 		case just print out a message). */
 		//vPrintString( "Handler task - Processing event.\r\n" );
@@ -1163,8 +1164,15 @@ BaseType_t xHigherPriorityTaskWoken;
 	context switch is required. */
 	xHigherPriorityTaskWoken = pdFALSE;
 
-	/* 'Give' the semaphore to unblock the task. */
-	xSemaphoreGiveFromISR( xBinarySemaphore, &xHigherPriorityTaskWoken );
+	/* 'Give' the semaphore multiple times.  The first will unblock the deferred
+	interrupt handling task, the following 'gives' are to demonstrate that the
+	semaphore latches the events to allow the handler task to process them in
+	turn without events getting lost.  This simulates multiple interrupts being
+	processed by the processor, even though in this case the events are
+	simulated within a single interrupt occurrence.*/
+	xSemaphoreGiveFromISR( xCountingSemaphore, &xHigherPriorityTaskWoken );
+	xSemaphoreGiveFromISR( xCountingSemaphore, &xHigherPriorityTaskWoken );
+	xSemaphoreGiveFromISR( xCountingSemaphore, &xHigherPriorityTaskWoken );
 
 	/* Pass the xHigherPriorityTaskWoken value into portYIELD_FROM_ISR().  If
 	xHigherPriorityTaskWoken was set to pdTRUE inside xSemaphoreGiveFromISR()
@@ -1178,6 +1186,8 @@ BaseType_t xHigherPriorityTaskWoken;
 
 void interruptPrint()
 {
+	HAL_UART_Transmit(&huart2, (uint8_t *) "Handler task - Processing event.\r\n" , sizeof( "Handler task - Processing event.\r\n" ), 1000);
+	HAL_UART_Transmit(&huart2, (uint8_t *) "Handler task - Processing event.\r\n" , sizeof( "Handler task - Processing event.\r\n" ), 1000);
 	HAL_UART_Transmit(&huart2, (uint8_t *) "Handler task - Processing event.\r\n" , sizeof( "Handler task - Processing event.\r\n" ), 1000);
 	interruptFlag=0;
 }
