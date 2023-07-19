@@ -36,6 +36,10 @@
 
 #include "FreeRTOSConfig.h"
 #include "timers.h"
+#include "FreeRTOS.h"
+#include "task.h"
+#include "semphr.h"
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -98,9 +102,10 @@
 #endif
 #endif //#ifdef SPI
 
-/* The periods assigned to the one-shot and auto-reload timers are 3.333 second and half a second respectively. */
-#define mainONE_SHOT_TIMER_PERIOD pdMS_TO_TICKS( 3333 )
-#define mainAUTO_RELOAD_TIMER_PERIOD pdMS_TO_TICKS( 500 )
+/* The number of the simulated interrupt used in this example.  Numbers 0 to 2
+are used by the FreeRTOS Windows port itself, so 3 is the first number available
+to the application. */
+#define mainINTERRUPT_NUMBER	3
 
 
 /* USER CODE END PM */
@@ -180,6 +185,8 @@ uint8_t memoryPageReadRx[262];
 uint8_t buffer[BUFFER_SIZE];
 uint8_t userBuffer[BUFFER_SIZE];
 #endif //#ifdef SPI
+
+uint32_t interruptFlag=0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -192,8 +199,18 @@ static void MX_WWDG_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_ADC1_Init(void);
 static void MX_SPI1_Init(void);
+void StartTask01(void const * argument);
+void StartTask02(void const * argument);
+
 /* USER CODE BEGIN PFP */
-static void prvTimerCallback( TimerHandle_t xTimer );
+/* The tasks to be created. */
+static void vHandlerTask( void *pvParameters );
+static void vPeriodicTask( void *pvParameters );
+
+/* The service routine for the (simulated) interrupt.  This is the interrupt
+that the task will be synchronized with. */
+static uint32_t ulExampleInterruptHandler( void );
+void interruptPrint();
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -391,12 +408,276 @@ void vApplicationGetTimerTaskMemory( StaticTask_t **ppxTimerTaskTCBBuffer,
     *pulTimerTaskStackSize = configTIMER_TASK_STACK_DEPTH;
 }
 
+/* Declare a variable of type SemaphoreHandle_t.  This is used to reference the
+semaphore that is used to synchronize a task with an interrupt. */
+SemaphoreHandle_t xBinarySemaphore;
 /* USER CODE END 0 */
 
 /**
   * @brief  The application entry point.
   * @retval int
   */
+int main(void)
+{
+  /* USER CODE BEGIN 1 */
+
+  /* USER CODE END 1 */
+
+  /* MCU Configuration--------------------------------------------------------*/
+
+  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
+  HAL_Init();
+
+  /* USER CODE BEGIN Init */
+
+  /* USER CODE END Init */
+
+  /* Configure the system clock */
+  SystemClock_Config();
+
+  /* USER CODE BEGIN SysInit */
+
+  /* USER CODE END SysInit */
+
+  /* Initialize all configured peripherals */
+  MX_GPIO_Init();
+  MX_USART2_UART_Init();
+  //MX_RTC_Init();
+  //MX_IWDG_Init();
+  //MX_WWDG_Init();
+  //MX_I2C1_Init();
+  //MX_ADC1_Init();
+  //MX_SPI1_Init();
+  /* USER CODE BEGIN 2 */
+#ifdef I_W_D_G
+  HAL_UART_Transmit(&huart2, (uint8_t *)"Watchdog is initialized\n", sizeof("Watchdog is initialized\n"), 1000);
+#endif //#ifdef I_W_D_G
+
+#ifdef ECHOBACK
+  // Enable USART2 receive interrupt
+  USART2->CR1 |= USART_CR1_RXNEIE;
+#endif //ifdef ECHOBACK
+
+#ifdef R_T_C
+  /* Check if the RTC has been initialized */
+  if (HAL_RTCEx_BKUPRead(&hrtc, RTC_BKP_DR1) != 0x32F2)
+  {
+      //set the time
+      setInitialTime();
+  }
+  setAlarm();
+#endif //ifdef R_T_C
+
+#ifdef I_W_D_G
+  // Get the current time
+   uint32_t startTime = HAL_GetTick();
+   uint32_t elapsedTime = 0;
+#endif //#ifdef I_W_D_G
+
+#ifdef I_2_C
+   SSD1306_Init();
+   SSD1306_Clear();
+
+   //To print name on a display
+//   SSD1306_GotoXY (0,0);
+//   SSD1306_Puts ("Shrey", &Font_11x18, 1);
+//   SSD1306_GotoXY (0, 30);
+//   SSD1306_Puts ("Bechara", &Font_11x18, 1);
+//   SSD1306_UpdateScreen();
+#endif //#ifdef I_2_C
+
+#ifdef ADC_DMA
+   HAL_ADC_Start_DMA(&hadc1, (uint32_t *)adcRaw, 2);
+   HAL_TIM_Base_Start(&htim3);
+#endif //#ifdef ADC_DMA
+
+#ifdef ADC_IT
+   HAL_ADC_Start_IT(&hadc1);
+#endif //#ifdef ADC_IT
+
+
+
+  /* USER CODE END 2 */
+
+  /* USER CODE BEGIN RTOS_MUTEX */
+  /* add mutexes, ... */
+  /* USER CODE END RTOS_MUTEX */
+
+  /* USER CODE BEGIN RTOS_SEMAPHORES */
+  /* add semaphores, ... */
+  /* USER CODE END RTOS_SEMAPHORES */
+
+  /* USER CODE BEGIN RTOS_TIMERS */
+  /* start timers, add new ones, ... */
+  /* USER CODE END RTOS_TIMERS */
+
+  /* USER CODE BEGIN RTOS_QUEUES */
+  /* add queues, ... */
+  /* USER CODE END RTOS_QUEUES */
+
+  /* Create the thread(s) */
+  /* definition and creation of Task01 */
+   /* Before a semaphore is used it must be explicitly created.  In this
+  	example	a binary semaphore is created. */
+      xBinarySemaphore = xSemaphoreCreateBinary();
+
+  	/* Check the semaphore was created successfully. */
+  	if( xBinarySemaphore != NULL )
+  	{
+  		/* Create the 'handler' task, which is the task to which interrupt
+  		processing is deferred, and so is the task that will be synchronized
+  		with the interrupt.  The handler task is created with a high priority to
+  		ensure it runs immediately after the interrupt exits.  In this case a
+  		priority of 3 is chosen. */
+  		xTaskCreate( vHandlerTask, "Handler", 1000, NULL, 3, NULL );
+
+  		/* Create the task that will periodically generate a software interrupt.
+  		This is created with a priority below the handler task to ensure it will
+  		get preempted each time the handler task exits the Blocked state. */
+  		xTaskCreate( vPeriodicTask, "Periodic", 1000, NULL, 1, NULL );
+
+  		/* Install the handler for the software interrupt.  The syntax necessary
+  		to do this is dependent on the FreeRTOS port being used.  The syntax
+  		shown here can only be used with the FreeRTOS Windows port, where such
+  		interrupts are only simulated. */
+  		//vPortSetInterruptHandler( mainINTERRUPT_NUMBER, ulExampleInterruptHandler );
+  	}
+  /* USER CODE BEGIN RTOS_THREADS */
+  /* add threads, ... */
+  /* USER CODE END RTOS_THREADS */
+
+  /* Start scheduler */
+  osKernelStart();
+  /* We should never get here as control is now taken by the scheduler */
+  /* Infinite loop */
+  /* USER CODE BEGIN WHILE */
+  while (1)
+  {
+    /* USER CODE END WHILE */
+
+    /* USER CODE BEGIN 3 */
+#ifdef R_T_C
+	  if(RTC_Interrupt_flag!=0)
+	  	      {
+		  	  HAL_UART_Transmit(&huart2, (uint8_t *)"ALarm is called", sizeof("ALarm is called"), 1000);
+	  	      RTC_Interrupt_flag=0;
+	  	      }
+	  /* Wait for a quick delay (e.g., 1 second) */
+	  	  	  HAL_Delay(1000);
+//
+	  	      /* Get the current time from the RTC */
+	 	  	  getCurrentTime();
+//
+//	      /* Print the timeS in Tera Term */
+	      HAL_UART_Transmit(&huart2, (uint8_t *)timeString, MAX_TIME_STRING_LENGTH, 1000);
+	      HAL_UART_Transmit(&huart2, (uint8_t *)"\n", sizeof("\n"), 1000);
+#endif //ifdef R_T_C
+
+#ifdef I_2_C
+//	      SSD1306_Puts (timeString, &Font_11x18, 1);
+//	      SSD1306_UpdateScreen();
+//	      SSD1306_GotoXY (0,0);
+#endif //#ifdef I_2_C
+
+#ifdef I_W_D_G
+	      // Get the elapsed time since starting
+	          elapsedTime = HAL_GetTick() - startTime;
+
+	      // Check if the first 30 seconds have elapsed
+	          if (elapsedTime <= IWDG_TIMEOUT)
+	          {
+	            // Send signal to the watchdog
+	        	HAL_UART_Transmit(&huart2, (uint8_t *)"Health is Okay..!\n", sizeof("Health is Okay..!\n"), 1000);
+	        	HAL_Delay(1000);
+	        	HAL_IWDG_Refresh(&hiwdg);
+	          }
+	          else{
+	        	  HAL_UART_Transmit(&huart2, (uint8_t *)"Health signal is stopped..!\n", sizeof("Health signal is stopped..!\n"), 1000);
+	        	  HAL_Delay(1000);
+	      }
+#endif //#ifdef I_W_D_G
+
+#ifdef ADC_DMA
+	          if(adcConvCmplt){
+	        	  //Something do
+	        	  double VrefInt = (VREFINT * ADCMAX)/adcRaw[0]; //it will give real supply voltage in microcontroller
+	        	  double VTmpSens = (VrefInt*adcRaw[1])/ADCMAX; //it is used to check whether internal temp is running proper or not i.e. If its proper it's value will be similar to 0.76(sensor voltage at 25 degree C)
+	        	  temperature = (VTmpSens - V25)/(AVG_SLOPE) + 25.0;
+	        	  sprintf(tempBuffer,"%0.2lf", temperature);
+	        	  HAL_UART_Transmit(&huart2, (uint8_t *)tempBuffer, strlen(tempBuffer), 1000);
+	    	      HAL_UART_Transmit(&huart2, (uint8_t *)"\n", sizeof("\n"), 1000);
+	    	      SSD1306_GotoXY (0,0);
+	    	      SSD1306_Puts (tempBuffer, &Font_11x18, 1);
+	    	      SSD1306_UpdateScreen();
+	        	  adcConvCmplt=0;
+	        	  HAL_Delay(1000);
+	          }
+#endif //#ifdef ADC_DMA
+
+#ifdef ADC_POLL
+	     HAL_ADC_Start(&hadc1);
+	     HAL_ADC_PollForConversion(&hadc1, 100);
+	     adcVal=HAL_ADC_GetValue(&hadc1);
+	     HAL_ADC_Stop(&hadc1);
+	     double VTmpSens = (VrefInt*adcVal)/ADCMAX; //it is used to check whether internal temp is running proper or not i.e. If its proper it's value will be similar to 0.76(sensor voltage at 25 degree C)
+	     temperature = (VTmpSens - V25)/(AVG_SLOPE) + 25.0;
+	     sprintf(tempBuffer,"%0.2lf", temperature);
+	     HAL_UART_Transmit(&huart2, (uint8_t *)tempBuffer, strlen(tempBuffer), 1000);
+	     HAL_UART_Transmit(&huart2, (uint8_t *)"\n", sizeof("\n"), 1000);
+	     HAL_Delay(1000);
+#endif //#ifdef ADC_POLL
+
+#ifdef ADC_IT
+	     if(adcInterruptCheckFlag){
+	    	    sprintf(tempBuffer,"%0.2lf", temperature);
+	    	    HAL_UART_Transmit(&huart2, (uint8_t *)tempBuffer, strlen(tempBuffer), 1000);
+	    	    HAL_UART_Transmit(&huart2, (uint8_t *)"\n", sizeof("\n"), 1000);
+	    	    adcInterruptCheckFlag=0;
+	    	    HAL_Delay(1000);
+	     }
+#endif //#ifdef ADC_IT
+
+#ifdef SPI
+	 	//Condition to check whether device is ready or not
+	     isDeviceReadyAT45DB081E();
+	     break;
+#endif //#ifdef SPI
+  }
+#ifdef SPI
+  	 //To read the DeviceID, manufacturer details.
+  	 uint8_t DeviceIDRxBuffer[6] = {0, 0, 0, 0, 0, 0};
+  	 uint8_t DeviceIDTxBuffer[6] = {0x9F, 0, 0, 0, 0, 0};
+  	 spiChipSelect();
+	 HAL_SPI_TransmitReceive(&hspi1, DeviceIDTxBuffer, DeviceIDRxBuffer, 6, 1000);
+	 spiChipDeselect();
+
+	 //Filling the "buffer" and its size is BUFFER_SIZE
+	 for (uint16_t bufferInput = 0; bufferInput < BUFFER_SIZE; bufferInput++) {
+	         if (bufferInput <= 255) {
+	             buffer[bufferInput] = (uint8_t)bufferInput;
+	         } else {
+	             buffer[bufferInput] = (uint8_t)(255 - (bufferInput - 256));
+	         }
+	     }
+	 /* the parameter of memoryWrite is
+	  para1 - Address of mainMemory, on which you want to write the buffer
+	  para2 - Pass the "buffer" i.e. content you want to write to mainMemory
+	  para3 - From para2 how much you want to write i.e. no of bytes
+	  */
+
+	 flashMemoryWriteAT45DB081E(MEMORY_WRITE_ADDRESS, buffer, 512);
+	 /* the parameter of memoryRead and its size is SIZE
+	  para1 - Address of mainMemory, from which you want to start to read
+	  para2 - Pass the "userBuffer" i.e. content you want to read from mainMemory will be stored in this buffer
+	  para3 - how much bytes you want to read
+	  */
+	 flashMemoryReadAT45DB081E(MEMORY_READ_ADDRESS, userBuffer, 2);
+while(1){
+}
+#endif //#ifdef SPI
+  /* USER CODE END 3 */
+}
+
 /**
   * @brief System Clock Configuration
   * @retval None
@@ -669,278 +950,6 @@ static void MX_RTC_Init(void)
   * @param None
   * @retval None
   */
-int main(void)
-{
-  /* USER CODE BEGIN 1 */
-
-  /* USER CODE END 1 */
-
-  /* MCU Configuration--------------------------------------------------------*/
-
-  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
-  HAL_Init();
-
-  /* USER CODE BEGIN Init */
-
-  /* USER CODE END Init */
-
-  /* Configure the system clock */
-  SystemClock_Config();
-
-  /* USER CODE BEGIN SysInit */
-
-  /* USER CODE END SysInit */
-
-  /* Initialize all configured peripherals */
-  MX_GPIO_Init();
-  MX_USART2_UART_Init();
-  //MX_RTC_Init();
-  //MX_IWDG_Init();
-  //MX_WWDG_Init();
-  //MX_I2C1_Init();
-  //MX_ADC1_Init();
-  MX_SPI1_Init();
-  /* USER CODE BEGIN 2 */
-#ifdef I_W_D_G
-  HAL_UART_Transmit(&huart2, (uint8_t *)"Watchdog is initialized\n", sizeof("Watchdog is initialized\n"), 1000);
-#endif //#ifdef I_W_D_G
-
-#ifdef ECHOBACK
-  // Enable USART2 receive interrupt
-  USART2->CR1 |= USART_CR1_RXNEIE;
-#endif //ifdef ECHOBACK
-
-#ifdef R_T_C
-  /* Check if the RTC has been initialized */
-  if (HAL_RTCEx_BKUPRead(&hrtc, RTC_BKP_DR1) != 0x32F2)
-  {
-      //set the time
-      setInitialTime();
-  }
-  setAlarm();
-#endif //ifdef R_T_C
-
-#ifdef I_W_D_G
-  // Get the current time
-   uint32_t startTime = HAL_GetTick();
-   uint32_t elapsedTime = 0;
-#endif //#ifdef I_W_D_G
-
-#ifdef I_2_C
-   SSD1306_Init();
-   SSD1306_Clear();
-
-   //To print name on a display
-//   SSD1306_GotoXY (0,0);
-//   SSD1306_Puts ("Shrey", &Font_11x18, 1);
-//   SSD1306_GotoXY (0, 30);
-//   SSD1306_Puts ("Bechara", &Font_11x18, 1);
-//   SSD1306_UpdateScreen();
-#endif //#ifdef I_2_C
-
-#ifdef ADC_DMA
-   HAL_ADC_Start_DMA(&hadc1, (uint32_t *)adcRaw, 2);
-   HAL_TIM_Base_Start(&htim3);
-#endif //#ifdef ADC_DMA
-
-#ifdef ADC_IT
-   HAL_ADC_Start_IT(&hadc1);
-#endif //#ifdef ADC_IT
-
-
-
-  /* USER CODE END 2 */
-
-  /* USER CODE BEGIN RTOS_MUTEX */
-  /* add mutexes, ... */
-  /* USER CODE END RTOS_MUTEX */
-
-  /* USER CODE BEGIN RTOS_SEMAPHORES */
-  /* add semaphores, ... */
-  /* USER CODE END RTOS_SEMAPHORES */
-
-  /* USER CODE BEGIN RTOS_TIMERS */
-  /* start timers, add new ones, ... */
-  /* USER CODE END RTOS_TIMERS */
-
-  /* USER CODE BEGIN RTOS_QUEUES */
-  /* add queues, ... */
-  /* USER CODE END RTOS_QUEUES */
-
-  /* Create the thread(s) */
-
-   TimerHandle_t xAutoReloadTimer, xOneShotTimer;
-   BaseType_t xTimer1Started, xTimer2Started;
-
-   /* Create the one shot timer software timer, storing the handle in xOneShotTimer. */
-   xOneShotTimer = xTimerCreate( "OneShot",
-								   mainONE_SHOT_TIMER_PERIOD,
-								   pdFALSE,
-								   /* The timer’s ID is initialized to 0. */
-								   0,
-								   /* prvTimerCallback() is used by both timers. */
-								   prvTimerCallback
-								   );
-   /* Create the auto-reload software timer, storing the handle in xAutoReloadTimer */
-   xAutoReloadTimer = xTimerCreate( "AutoReload",
-									   mainAUTO_RELOAD_TIMER_PERIOD,
-									   pdTRUE,
-									   /* The timer’s ID is initialized to 0. */
-									   0,
-									   /* prvTimerCallback() is used by both timers. */
-									   prvTimerCallback
-									   );
-
-   if( ( xOneShotTimer != NULL ) && ( xAutoReloadTimer != NULL ) )
-   {
-		   /* Start the software timers, using a block time of 0 (no block time). The scheduler has
-		   not been started yet so any block time specified here would be ignored anyway. */
-		   xTimer1Started = xTimerStart( xOneShotTimer, 0 );
-		   xTimer2Started = xTimerStart( xAutoReloadTimer, 0 );
-		   /* The implementation of xTimerStart() uses the timer command queue, and xTimerStart()
-		   will fail if the timer command queue gets full. The timer service task does not get
-		   created until the scheduler is started, so all commands sent to the command queue will
-		   stay in the queue until after the scheduler has been started. Check both calls to
-		   xTimerStart() passed. */
-		   if( ( xTimer1Started == pdPASS ) && ( xTimer2Started == pdPASS ) )
-		   {
-			   	   /* Start the scheduler. */
-			   	   vTaskStartScheduler();
-		   }
-   }
-  /* USER CODE BEGIN RTOS_THREADS */
-  /* add threads, ... */
-  /* USER CODE END RTOS_THREADS */
-  /* We should never get here as control is now taken by the scheduler */
-  /* Infinite loop */
-  /* USER CODE BEGIN WHILE */
-  while (1)
-  {
-    /* USER CODE END WHILE */
-
-    /* USER CODE BEGIN 3 */
-#ifdef R_T_C
-	  if(RTC_Interrupt_flag!=0)
-	  	      {
-		  	  HAL_UART_Transmit(&huart2, (uint8_t *)"ALarm is called", sizeof("ALarm is called"), 1000);
-	  	      RTC_Interrupt_flag=0;
-	  	      }
-	  /* Wait for a quick delay (e.g., 1 second) */
-	  	  	  HAL_Delay(1000);
-//
-	  	      /* Get the current time from the RTC */
-	 	  	  getCurrentTime();
-//
-//	      /* Print the timeS in Tera Term */
-	      HAL_UART_Transmit(&huart2, (uint8_t *)timeString, MAX_TIME_STRING_LENGTH, 1000);
-	      HAL_UART_Transmit(&huart2, (uint8_t *)"\n", sizeof("\n"), 1000);
-#endif //ifdef R_T_C
-
-#ifdef I_2_C
-//	      SSD1306_Puts (timeString, &Font_11x18, 1);
-//	      SSD1306_UpdateScreen();
-//	      SSD1306_GotoXY (0,0);
-#endif //#ifdef I_2_C
-
-#ifdef I_W_D_G
-	      // Get the elapsed time since starting
-	          elapsedTime = HAL_GetTick() - startTime;
-
-	      // Check if the first 30 seconds have elapsed
-	          if (elapsedTime <= IWDG_TIMEOUT)
-	          {
-	            // Send signal to the watchdog
-	        	HAL_UART_Transmit(&huart2, (uint8_t *)"Health is Okay..!\n", sizeof("Health is Okay..!\n"), 1000);
-	        	HAL_Delay(1000);
-	        	HAL_IWDG_Refresh(&hiwdg);
-	          }
-	          else{
-	        	  HAL_UART_Transmit(&huart2, (uint8_t *)"Health signal is stopped..!\n", sizeof("Health signal is stopped..!\n"), 1000);
-	        	  HAL_Delay(1000);
-	      }
-#endif //#ifdef I_W_D_G
-
-#ifdef ADC_DMA
-	          if(adcConvCmplt){
-	        	  //Something do
-	        	  double VrefInt = (VREFINT * ADCMAX)/adcRaw[0]; //it will give real supply voltage in microcontroller
-	        	  double VTmpSens = (VrefInt*adcRaw[1])/ADCMAX; //it is used to check whether internal temp is running proper or not i.e. If its proper it's value will be similar to 0.76(sensor voltage at 25 degree C)
-	        	  temperature = (VTmpSens - V25)/(AVG_SLOPE) + 25.0;
-	        	  sprintf(tempBuffer,"%0.2lf", temperature);
-	        	  HAL_UART_Transmit(&huart2, (uint8_t *)tempBuffer, strlen(tempBuffer), 1000);
-	    	      HAL_UART_Transmit(&huart2, (uint8_t *)"\n", sizeof("\n"), 1000);
-	    	      SSD1306_GotoXY (0,0);
-	    	      SSD1306_Puts (tempBuffer, &Font_11x18, 1);
-	    	      SSD1306_UpdateScreen();
-	        	  adcConvCmplt=0;
-	        	  HAL_Delay(1000);
-	          }
-#endif //#ifdef ADC_DMA
-
-#ifdef ADC_POLL
-	     HAL_ADC_Start(&hadc1);
-	     HAL_ADC_PollForConversion(&hadc1, 100);
-	     adcVal=HAL_ADC_GetValue(&hadc1);
-	     HAL_ADC_Stop(&hadc1);
-	     double VTmpSens = (VrefInt*adcVal)/ADCMAX; //it is used to check whether internal temp is running proper or not i.e. If its proper it's value will be similar to 0.76(sensor voltage at 25 degree C)
-	     temperature = (VTmpSens - V25)/(AVG_SLOPE) + 25.0;
-	     sprintf(tempBuffer,"%0.2lf", temperature);
-	     HAL_UART_Transmit(&huart2, (uint8_t *)tempBuffer, strlen(tempBuffer), 1000);
-	     HAL_UART_Transmit(&huart2, (uint8_t *)"\n", sizeof("\n"), 1000);
-	     HAL_Delay(1000);
-#endif //#ifdef ADC_POLL
-
-#ifdef ADC_IT
-	     if(adcInterruptCheckFlag){
-	    	    sprintf(tempBuffer,"%0.2lf", temperature);
-	    	    HAL_UART_Transmit(&huart2, (uint8_t *)tempBuffer, strlen(tempBuffer), 1000);
-	    	    HAL_UART_Transmit(&huart2, (uint8_t *)"\n", sizeof("\n"), 1000);
-	    	    adcInterruptCheckFlag=0;
-	    	    HAL_Delay(1000);
-	     }
-#endif //#ifdef ADC_IT
-
-#ifdef SPI
-	 	//Condition to check whether device is ready or not
-	     isDeviceReadyAT45DB081E();
-	     break;
-#endif //#ifdef SPI
-  }
-#ifdef SPI
-  	 //To read the DeviceID, manufacturer details.
-  	 uint8_t DeviceIDRxBuffer[6] = {0, 0, 0, 0, 0, 0};
-  	 uint8_t DeviceIDTxBuffer[6] = {0x9F, 0, 0, 0, 0, 0};
-  	 spiChipSelect();
-	 HAL_SPI_TransmitReceive(&hspi1, DeviceIDTxBuffer, DeviceIDRxBuffer, 6, 1000);
-	 spiChipDeselect();
-
-	 //Filling the "buffer" and its size is BUFFER_SIZE
-	 for (uint16_t bufferInput = 0; bufferInput < BUFFER_SIZE; bufferInput++) {
-	         if (bufferInput <= 255) {
-	             buffer[bufferInput] = (uint8_t)bufferInput;
-	         } else {
-	             buffer[bufferInput] = (uint8_t)(255 - (bufferInput - 256));
-	         }
-	     }
-	 /* the parameter of memoryWrite is
-	  para1 - Address of mainMemory, on which you want to write the buffer
-	  para2 - Pass the "buffer" i.e. content you want to write to mainMemory
-	  para3 - From para2 how much you want to write i.e. no of bytes
-	  */
-
-	 flashMemoryWriteAT45DB081E(MEMORY_WRITE_ADDRESS, buffer, 512);
-	 /* the parameter of memoryRead and its size is SIZE
-	  para1 - Address of mainMemory, from which you want to start to read
-	  para2 - Pass the "userBuffer" i.e. content you want to read from mainMemory will be stored in this buffer
-	  para3 - how much bytes you want to read
-	  */
-	 flashMemoryReadAT45DB081E(MEMORY_READ_ADDRESS, userBuffer, 2);
-while(1){
-}
-#endif //#ifdef SPI
-  /* USER CODE END 3 */
-}
-
 static void MX_SPI1_Init(void)
 {
 
@@ -1090,46 +1099,152 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
     adcInterruptCheckFlag++;
 }
 #endif //#ifdef ADC_IT
-
-static void prvTimerCallback( TimerHandle_t xTimer )
+static void vHandlerTask( void *pvParameters )
 {
-		TickType_t xTimeNow;
-		uint32_t ulExecutionCount;
-		char buffer[50];
-		/* A count of the number of times this software timer has expired is stored in the timer's
-		ID. Obtain the ID, increment it, then save it as the new ID value. The ID is a void
-		pointer, so is cast to a uint32_t. */
-		ulExecutionCount = ( uint32_t ) pvTimerGetTimerID( xTimer );
-		ulExecutionCount++;
-		vTimerSetTimerID( xTimer, ( void * ) ulExecutionCount );
-		/* Obtain the current tick count. */
-		xTimeNow = xTaskGetTickCount();
-		/* The handle of the one-shot timer was stored in xOneShotTimer when the timer was created.
-		Compare the handle passed into this function with xOneShotTimer to determine if it was the
-		one-shot or auto-reload timer that expired, then output a string to show the time at which
-		the callback was executed. */
-		if( xTimer == "xOneShotTimer" )
-		{
-			sprintf(buffer,"One-shot timer callback executing %ld\n\r", xTimeNow);
-			HAL_UART_Transmit(&huart2, (uint8_t *)buffer, sizeof(buffer), 1000);
-		}
-		else
-		{
-			/* xTimer did not equal xOneShotTimer, so it must have been the auto-reload timer that
-			expired. */
-			sprintf(buffer,"Auto-reload timer callback executing %ld\n\r", xTimeNow);
-			HAL_UART_Transmit(&huart2, (uint8_t *)buffer, sizeof(buffer), 1000);
-			if( ulExecutionCount == 5 )
-			{
-				/* Stop the auto-reload timer after it has executed 5 times. This callback function
-				executes in the context of the RTOS daemon task so must not call any functions that
-				might place the daemon task into the Blocked state. Therefore a block time of 0 is
-				used. */
-				xTimerStop( xTimer, 0 );
-			}
-		}
+	/* As per most tasks, this task is implemented within an infinite loop. */
+	for( ;; )
+	{
+		/* Use the semaphore to wait for the event.  The semaphore was created
+		before the scheduler was started so before this task ran for the first
+		time.  The task blocks indefinitely meaning this function call will only
+		return once the semaphore has been successfully obtained - so there is
+		no need to check the returned value. */
+		xSemaphoreTake( xBinarySemaphore, portMAX_DELAY );
+
+		/* To get here the event must have occurred.  Process the event (in this
+		case just print out a message). */
+		//vPrintString( "Handler task - Processing event.\r\n" );
+		HAL_UART_Transmit(&huart2, (uint8_t *) "Handler task - Processing event.\r\n" , sizeof( "Handler task - Processing event.\r\n" ), 1000);
+
+	}
+}
+
+static void vPeriodicTask( void *pvParameters )
+{
+const TickType_t xDelay500ms = pdMS_TO_TICKS( 500UL );
+
+	/* As per most tasks, this task is implemented within an infinite loop. */
+	for( ;; )
+	{
+		/* This task is just used to 'simulate' an interrupt.  This is done by
+		periodically generating a simulated software interrupt.  Block until it
+		is time to generate the software interrupt again. */
+		vTaskDelay( xDelay500ms );
+
+		/* Generate the interrupt, printing a message both before and after
+		the interrupt has been generated so the sequence of execution is evident
+		from the output.
+
+		The syntax used to generate a software interrupt is dependent on the
+		FreeRTOS port being used.  The syntax used below can only be used with
+		the FreeRTOS Windows port, in which such interrupts are only
+		simulated. */
+		//vPrintString( "Periodic task - About to generate an interrupt.\r\n" );
+		HAL_UART_Transmit(&huart2, (uint8_t *)"Periodic task - About to generate an interrupt.\r\n" , sizeof( "Periodic task - About to generate an interrupt.\r\n" ), 1000);
+	    //interruptFlag++;
+//	    if(interruptFlag==500)
+//	        {
+//	    		HAL_UART_Transmit(&huart2, (uint8_t *) "Handler task - Processing event.\r\n" , sizeof( "Handler task - Processing event.\r\n" ), 1000);
+//	    		interruptFlag=0;
+//	        }
+		//vPortGenerateSimulatedInterrupt( mainINTERRUPT_NUMBER );
+		//vPrintString( "Periodic task - Interrupt generated.\r\n\r\n\r\n" );
+		HAL_UART_Transmit(&huart2, (uint8_t *)"Periodic task - Interrupt generated.\r\n\r\n\r\n" , sizeof( "Periodic task - Interrupt generated.\r\n\r\n\r\n" ), 1000);
+
+	}
+}
+
+static uint32_t ulExampleInterruptHandler( void )
+{
+BaseType_t xHigherPriorityTaskWoken;
+
+	/* The xHigherPriorityTaskWoken parameter must be initialized to pdFALSE as
+	it will get set to pdTRUE inside the interrupt safe API function if a
+	context switch is required. */
+	xHigherPriorityTaskWoken = pdFALSE;
+
+	/* 'Give' the semaphore to unblock the task. */
+	xSemaphoreGiveFromISR( xBinarySemaphore, &xHigherPriorityTaskWoken );
+
+	/* Pass the xHigherPriorityTaskWoken value into portYIELD_FROM_ISR().  If
+	xHigherPriorityTaskWoken was set to pdTRUE inside xSemaphoreGiveFromISR()
+	then calling portYIELD_FROM_ISR() will request a context switch.  If
+	xHigherPriorityTaskWoken is still pdFALSE then calling
+	portYIELD_FROM_ISR() will have no effect.  The implementation of
+	portYIELD_FROM_ISR() used by the Windows port includes a return statement,
+	which is why this function does not explicitly return a value. */
+	portYIELD_FROM_ISR( xHigherPriorityTaskWoken );
+}
+
+void interruptPrint()
+{
+	HAL_UART_Transmit(&huart2, (uint8_t *) "Handler task - Processing event.\r\n" , sizeof( "Handler task - Processing event.\r\n" ), 1000);
+	interruptFlag=0;
 }
 /* USER CODE END 4 */
+
+/* USER CODE BEGIN Header_StartTask01 */
+/**
+  * @brief  Function implementing the Task01 thread.
+  * @param  argument: Not used
+  * @retval None
+  */
+/* USER CODE END Header_StartTask01 */
+void StartTask01(void const * argument)
+{
+  /* USER CODE BEGIN 5 */
+  /* Infinite loop */
+  for(;;)
+  {
+    osDelay(1);
+  }
+  /* USER CODE END 5 */
+}
+
+/* USER CODE BEGIN Header_StartTask02 */
+/**
+* @brief Function implementing the Task02 thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_StartTask02 */
+void StartTask02(void const * argument)
+{
+  /* USER CODE BEGIN StartTask02 */
+  /* Infinite loop */
+  for(;;)
+  {
+    osDelay(1);
+  }
+  /* USER CODE END StartTask02 */
+}
+
+/**
+  * @brief  Period elapsed callback in non blocking mode
+  * @note   This function is called  when TIM3 interrupt took place, inside
+  * HAL_TIM_IRQHandler(). It makes a direct call to HAL_IncTick() to increment
+  * a global variable "uwTick" used as application time base.
+  * @param  htim : TIM handle
+  * @retval None
+  */
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+  /* USER CODE BEGIN Callback 0 */
+
+  /* USER CODE END Callback 0 */
+  if (htim->Instance == TIM3) {
+    HAL_IncTick();
+    interruptFlag++;
+    if(interruptFlag==500)
+    {
+    	interruptPrint();
+    }
+  }
+  /* USER CODE BEGIN Callback 1 */
+
+  /* USER CODE END Callback 1 */
+}
+
 /**
   * @brief  This function is executed in case of error occurrence.
   * @retval None
