@@ -18,6 +18,7 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "cmsis_os.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -32,6 +33,13 @@
 #ifdef SPI
 #include <string.h>
 #endif //#ifdef SPI
+
+#include "FreeRTOSConfig.h"
+#include "timers.h"
+#include "FreeRTOS.h"
+#include "task.h"
+#include "semphr.h"
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -93,6 +101,13 @@
     #error Invalid MEMORY_READ_ADDRESS value. It must be within the range of 0 to 4350.
 #endif
 #endif //#ifdef SPI
+
+/* The number of the simulated interrupt used in this example.  Numbers 0 to 2
+are used by the FreeRTOS Windows port itself, so 3 is the first number available
+to the application. */
+#define mainINTERRUPT_NUMBER	3
+
+
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
@@ -110,6 +125,8 @@ UART_HandleTypeDef huart2;
 
 WWDG_HandleTypeDef hwwdg;
 
+osThreadId Task01Handle;
+osThreadId Task02Handle;
 /* USER CODE BEGIN PV */
 #ifdef ECHOBACK
 char RecievedData;
@@ -168,6 +185,8 @@ uint8_t memoryPageReadRx[262];
 uint8_t buffer[BUFFER_SIZE];
 uint8_t userBuffer[BUFFER_SIZE];
 #endif //#ifdef SPI
+
+uint32_t interruptFlag=0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -180,8 +199,18 @@ static void MX_WWDG_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_ADC1_Init(void);
 static void MX_SPI1_Init(void);
-/* USER CODE BEGIN PFP */
+void StartTask01(void const * argument);
+void StartTask02(void const * argument);
 
+/* USER CODE BEGIN PFP */
+/* The tasks to be created. */
+static void vHandlerTask( void *pvParameters );
+static void vPeriodicTask( void *pvParameters );
+
+/* The service routine for the (simulated) interrupt.  This is the interrupt
+that the task will be synchronized with. */
+static uint32_t ulExampleInterruptHandler( void );
+void interruptPrint();
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -354,6 +383,35 @@ void flashMemoryReadAT45DB081E(uint32_t address, uint8_t* userBuffer, int readRa
     }
 }
 #endif //#ifdef SPI
+
+/* Declare a variable that will be incremented by the hook function. */
+volatile uint32_t ulIdleCycleCount = 0UL;
+/* Idle hook functions MUST be called vApplicationIdleHook(), take no parameters,
+and return void. */
+void vApplicationIdleHook( void )
+{
+/* This hook function does nothing but increment a counter. */
+ulIdleCycleCount++;
+}
+
+void vApplicationGetTimerTaskMemory( StaticTask_t **ppxTimerTaskTCBBuffer,
+                                     StackType_t **ppxTimerTaskStackBuffer,
+                                     uint32_t *pulTimerTaskStackSize )
+{
+    // Allocate memory for the timer task
+    static StaticTask_t xTimerTaskTCB;
+    static StackType_t uxTimerTaskStack[configTIMER_TASK_STACK_DEPTH];
+
+    // Assign the memory to the pointers
+    *ppxTimerTaskTCBBuffer = &xTimerTaskTCB;
+    *ppxTimerTaskStackBuffer = uxTimerTaskStack;
+    *pulTimerTaskStackSize = configTIMER_TASK_STACK_DEPTH;
+}
+
+/* Declare a variable of type SemaphoreHandle_t.  This is used to reference the
+semaphore that is used to synchronize a task with an interrupt. */
+SemaphoreHandle_t xCountingSemaphore;
+
 /* USER CODE END 0 */
 
 /**
@@ -390,7 +448,7 @@ int main(void)
   //MX_WWDG_Init();
   //MX_I2C1_Init();
   //MX_ADC1_Init();
-  MX_SPI1_Init();
+  //MX_SPI1_Init();
   /* USER CODE BEGIN 2 */
 #ifdef I_W_D_G
   HAL_UART_Transmit(&huart2, (uint8_t *)"Watchdog is initialized\n", sizeof("Watchdog is initialized\n"), 1000);
@@ -438,8 +496,61 @@ int main(void)
    HAL_ADC_Start_IT(&hadc1);
 #endif //#ifdef ADC_IT
 
+
+
   /* USER CODE END 2 */
 
+  /* USER CODE BEGIN RTOS_MUTEX */
+  /* add mutexes, ... */
+  /* USER CODE END RTOS_MUTEX */
+
+  /* USER CODE BEGIN RTOS_SEMAPHORES */
+  /* add semaphores, ... */
+  /* USER CODE END RTOS_SEMAPHORES */
+
+  /* USER CODE BEGIN RTOS_TIMERS */
+  /* start timers, add new ones, ... */
+  /* USER CODE END RTOS_TIMERS */
+
+  /* USER CODE BEGIN RTOS_QUEUES */
+  /* add queues, ... */
+  /* USER CODE END RTOS_QUEUES */
+
+  /* Create the thread(s) */
+  /* definition and creation of Task01 */
+   /* Before a semaphore is used it must be explicitly created.  In this
+	example a counting semaphore is created.  The semaphore is created to have a
+	maximum count value of 10, and an initial count value of 0. */
+	xCountingSemaphore = xSemaphoreCreateCounting( 10, 0 );
+
+	/* Check the semaphore was created successfully. */
+	if( xCountingSemaphore != NULL )
+	{
+		/* Create the 'handler' task, which is the task to which interrupt
+		processing is deferred, and so is the task that will be synchronized
+		with the interrupt.  The handler task is created with a high priority to
+		ensure it runs immediately after the interrupt exits.  In this case a
+		priority of 3 is chosen. */
+		xTaskCreate( vHandlerTask, "Handler", 1000, NULL, 3, NULL );
+
+		/* Create the task that will periodically generate a software interrupt.
+		This is created with a priority below the handler task to ensure it will
+		get preempted each time the handler task exits the Blocked state. */
+		xTaskCreate( vPeriodicTask, "Periodic", 1000, NULL, 1, NULL );
+
+		/* Install the handler for the software interrupt.  The syntax necessary
+		to do this is dependent on the FreeRTOS port being used.  The syntax
+		shown here can only be used with the FreeRTOS Windows port, where such
+		interrupts are only simulated. */
+		//vPortSetInterruptHandler( mainINTERRUPT_NUMBER, ulExampleInterruptHandler );
+	}
+  /* USER CODE BEGIN RTOS_THREADS */
+  /* add threads, ... */
+  /* USER CODE END RTOS_THREADS */
+
+  /* Start scheduler */
+  osKernelStart();
+  /* We should never get here as control is now taken by the scheduler */
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
@@ -990,8 +1101,159 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
     adcInterruptCheckFlag++;
 }
 #endif //#ifdef ADC_IT
+static void vHandlerTask( void *pvParameters )
+{
+	/* As per most tasks, this task is implemented within an infinite loop. */
+	for( ;; )
+	{
+		/* Use the semaphore to wait for the event.  The semaphore was created
+		before the scheduler was started so before this task ran for the first
+		time.  The task blocks indefinitely meaning this function call will only
+		return once the semaphore has been successfully obtained - so there is
+		no need to check the returned value. */
+		xSemaphoreTake( xCountingSemaphore, portMAX_DELAY );
+		/* To get here the event must have occurred.  Process the event (in this
+		case just print out a message). */
+		//vPrintString( "Handler task - Processing event.\r\n" );
+		HAL_UART_Transmit(&huart2, (uint8_t *) "Handler task - Processing event.\r\n" , sizeof( "Handler task - Processing event.\r\n" ), 1000);
 
+	}
+}
+
+static void vPeriodicTask( void *pvParameters )
+{
+const TickType_t xDelay500ms = pdMS_TO_TICKS( 500UL );
+
+	/* As per most tasks, this task is implemented within an infinite loop. */
+	for( ;; )
+	{
+		/* This task is just used to 'simulate' an interrupt.  This is done by
+		periodically generating a simulated software interrupt.  Block until it
+		is time to generate the software interrupt again. */
+		vTaskDelay( xDelay500ms );
+
+		/* Generate the interrupt, printing a message both before and after
+		the interrupt has been generated so the sequence of execution is evident
+		from the output.
+
+		The syntax used to generate a software interrupt is dependent on the
+		FreeRTOS port being used.  The syntax used below can only be used with
+		the FreeRTOS Windows port, in which such interrupts are only
+		simulated. */
+		//vPrintString( "Periodic task - About to generate an interrupt.\r\n" );
+		HAL_UART_Transmit(&huart2, (uint8_t *)"Periodic task - About to generate an interrupt.\r\n" , sizeof( "Periodic task - About to generate an interrupt.\r\n" ), 1000);
+	    //interruptFlag++;
+//	    if(interruptFlag==500)
+//	        {
+//	    		HAL_UART_Transmit(&huart2, (uint8_t *) "Handler task - Processing event.\r\n" , sizeof( "Handler task - Processing event.\r\n" ), 1000);
+//	    		interruptFlag=0;
+//	        }
+		//vPortGenerateSimulatedInterrupt( mainINTERRUPT_NUMBER );
+		//vPrintString( "Periodic task - Interrupt generated.\r\n\r\n\r\n" );
+		HAL_UART_Transmit(&huart2, (uint8_t *)"Periodic task - Interrupt generated.\r\n\r\n\r\n" , sizeof( "Periodic task - Interrupt generated.\r\n\r\n\r\n" ), 1000);
+
+	}
+}
+
+static uint32_t ulExampleInterruptHandler( void )
+{
+BaseType_t xHigherPriorityTaskWoken;
+
+	/* The xHigherPriorityTaskWoken parameter must be initialized to pdFALSE as
+	it will get set to pdTRUE inside the interrupt safe API function if a
+	context switch is required. */
+	xHigherPriorityTaskWoken = pdFALSE;
+
+	/* 'Give' the semaphore multiple times.  The first will unblock the deferred
+	interrupt handling task, the following 'gives' are to demonstrate that the
+	semaphore latches the events to allow the handler task to process them in
+	turn without events getting lost.  This simulates multiple interrupts being
+	processed by the processor, even though in this case the events are
+	simulated within a single interrupt occurrence.*/
+	xSemaphoreGiveFromISR( xCountingSemaphore, &xHigherPriorityTaskWoken );
+	xSemaphoreGiveFromISR( xCountingSemaphore, &xHigherPriorityTaskWoken );
+	xSemaphoreGiveFromISR( xCountingSemaphore, &xHigherPriorityTaskWoken );
+
+	/* Pass the xHigherPriorityTaskWoken value into portYIELD_FROM_ISR().  If
+	xHigherPriorityTaskWoken was set to pdTRUE inside xSemaphoreGiveFromISR()
+	then calling portYIELD_FROM_ISR() will request a context switch.  If
+	xHigherPriorityTaskWoken is still pdFALSE then calling
+	portYIELD_FROM_ISR() will have no effect.  The implementation of
+	portYIELD_FROM_ISR() used by the Windows port includes a return statement,
+	which is why this function does not explicitly return a value. */
+	portYIELD_FROM_ISR( xHigherPriorityTaskWoken );
+}
+
+void interruptPrint()
+{
+	HAL_UART_Transmit(&huart2, (uint8_t *) "Handler task - Processing event.\r\n" , sizeof( "Handler task - Processing event.\r\n" ), 1000);
+	HAL_UART_Transmit(&huart2, (uint8_t *) "Handler task - Processing event.\r\n" , sizeof( "Handler task - Processing event.\r\n" ), 1000);
+	HAL_UART_Transmit(&huart2, (uint8_t *) "Handler task - Processing event.\r\n" , sizeof( "Handler task - Processing event.\r\n" ), 1000);
+	interruptFlag=0;
+}
 /* USER CODE END 4 */
+
+/* USER CODE BEGIN Header_StartTask01 */
+/**
+  * @brief  Function implementing the Task01 thread.
+  * @param  argument: Not used
+  * @retval None
+  */
+/* USER CODE END Header_StartTask01 */
+void StartTask01(void const * argument)
+{
+  /* USER CODE BEGIN 5 */
+  /* Infinite loop */
+  for(;;)
+  {
+    osDelay(1);
+  }
+  /* USER CODE END 5 */
+}
+
+/* USER CODE BEGIN Header_StartTask02 */
+/**
+* @brief Function implementing the Task02 thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_StartTask02 */
+void StartTask02(void const * argument)
+{
+  /* USER CODE BEGIN StartTask02 */
+  /* Infinite loop */
+  for(;;)
+  {
+    osDelay(1);
+  }
+  /* USER CODE END StartTask02 */
+}
+
+/**
+  * @brief  Period elapsed callback in non blocking mode
+  * @note   This function is called  when TIM3 interrupt took place, inside
+  * HAL_TIM_IRQHandler(). It makes a direct call to HAL_IncTick() to increment
+  * a global variable "uwTick" used as application time base.
+  * @param  htim : TIM handle
+  * @retval None
+  */
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+  /* USER CODE BEGIN Callback 0 */
+
+  /* USER CODE END Callback 0 */
+  if (htim->Instance == TIM3) {
+    HAL_IncTick();
+    interruptFlag++;
+    if(interruptFlag==500)
+    {
+    	interruptPrint();
+    }
+  }
+  /* USER CODE BEGIN Callback 1 */
+
+  /* USER CODE END Callback 1 */
+}
 
 /**
   * @brief  This function is executed in case of error occurrence.
