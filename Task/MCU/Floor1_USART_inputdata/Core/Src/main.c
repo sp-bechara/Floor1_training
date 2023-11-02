@@ -35,10 +35,11 @@
 #endif //#ifdef SPI
 
 #include "FreeRTOSConfig.h"
-#include "timers.h"
 #include "FreeRTOS.h"
 #include "task.h"
 #include "semphr.h"
+#include "event_groups.h"
+#include "queue.h"
 
 /* USER CODE END Includes */
 
@@ -50,6 +51,9 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 
+
+
+// like 1
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -102,12 +106,13 @@
 #endif
 #endif //#ifdef SPI
 
-/* The number of the simulated interrupt used in this example.  Numbers 0 to 2
-are used by the FreeRTOS Windows port itself, so 3 is the first number available
-to the application. */
-#define mainINTERRUPT_NUMBER	3
 
-
+#define WALK_FLAG      (1 << 0) // 0b00000001
+#define DONT_WALK_FLAG (1 << 1) // 0b00000010
+#define WALK_TIME_MS 10000
+#define TASK1_BIT 1 << 0
+#define TASK2_BIT 1 << 1
+#define TASK3_BIT 1 << 2
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
@@ -128,6 +133,10 @@ WWDG_HandleTypeDef hwwdg;
 osThreadId Task01Handle;
 osThreadId Task02Handle;
 /* USER CODE BEGIN PV */
+int _write(int file, char *ptr, int len){
+    HAL_UART_Transmit(&huart2,(uint8_t*) ptr, len, HAL_MAX_DELAY);
+    return len;
+}
 #ifdef ECHOBACK
 char RecievedData;
 #endif //ifdef ECHOBACK
@@ -186,7 +195,10 @@ uint8_t buffer[BUFFER_SIZE];
 uint8_t userBuffer[BUFFER_SIZE];
 #endif //#ifdef SPI
 
-uint32_t interruptFlag=0;
+uint8_t signalFlag=0;
+//uint8_t dontWalkFlagForGreen=0;
+//uint8_t dontWalkFlagForYellow=0;
+//uint8_t walkFlagForRed=0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -203,14 +215,9 @@ void StartTask01(void const * argument);
 void StartTask02(void const * argument);
 
 /* USER CODE BEGIN PFP */
-/* The tasks to be created. */
-static void vHandlerTask( void *pvParameters );
-static void vPeriodicTask( void *pvParameters );
-
-/* The service routine for the (simulated) interrupt.  This is the interrupt
-that the task will be synchronized with. */
-static uint32_t ulExampleInterruptHandler( void );
-void interruptPrint();
+void trafficLightTask();
+void pedestrianSignalTask();
+void pedestrianQueueManagementTask();
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -383,35 +390,20 @@ void flashMemoryReadAT45DB081E(uint32_t address, uint8_t* userBuffer, int readRa
     }
 }
 #endif //#ifdef SPI
+//Declare the semaphore handle
+SemaphoreHandle_t xBinarySemaphore;
 
-/* Declare a variable that will be incremented by the hook function. */
-volatile uint32_t ulIdleCycleCount = 0UL;
-/* Idle hook functions MUST be called vApplicationIdleHook(), take no parameters,
-and return void. */
-void vApplicationIdleHook( void )
-{
-/* This hook function does nothing but increment a counter. */
-ulIdleCycleCount++;
-}
+// Declare the event group handle
+EventGroupHandle_t eventGroup;
 
-void vApplicationGetTimerTaskMemory( StaticTask_t **ppxTimerTaskTCBBuffer,
-                                     StackType_t **ppxTimerTaskStackBuffer,
-                                     uint32_t *pulTimerTaskStackSize )
-{
-    // Allocate memory for the timer task
-    static StaticTask_t xTimerTaskTCB;
-    static StackType_t uxTimerTaskStack[configTIMER_TASK_STACK_DEPTH];
+EventGroupHandle_t event;
+//Declare the mutex handle
+SemaphoreHandle_t mutexHandle;
 
-    // Assign the memory to the pointers
-    *ppxTimerTaskTCBBuffer = &xTimerTaskTCB;
-    *ppxTimerTaskStackBuffer = uxTimerTaskStack;
-    *pulTimerTaskStackSize = configTIMER_TASK_STACK_DEPTH;
-}
+//Declare the Queue handle
+QueueHandle_t xQueue;
 
-/* Declare a variable of type SemaphoreHandle_t.  This is used to reference the
-semaphore that is used to synchronize a task with an interrupt. */
-SemaphoreHandle_t xCountingSemaphore;
-
+uint32_t buffer[100];
 /* USER CODE END 0 */
 
 /**
@@ -495,9 +487,6 @@ int main(void)
 #ifdef ADC_IT
    HAL_ADC_Start_IT(&hadc1);
 #endif //#ifdef ADC_IT
-
-
-
   /* USER CODE END 2 */
 
   /* USER CODE BEGIN RTOS_MUTEX */
@@ -517,39 +506,34 @@ int main(void)
   /* USER CODE END RTOS_QUEUES */
 
   /* Create the thread(s) */
-  /* definition and creation of Task01 */
-   /* Before a semaphore is used it must be explicitly created.  In this
-	example a counting semaphore is created.  The semaphore is created to have a
-	maximum count value of 10, and an initial count value of 0. */
-	xCountingSemaphore = xSemaphoreCreateCounting( 10, 0 );
-
-	/* Check the semaphore was created successfully. */
-	if( xCountingSemaphore != NULL )
-	{
-		/* Create the 'handler' task, which is the task to which interrupt
-		processing is deferred, and so is the task that will be synchronized
-		with the interrupt.  The handler task is created with a high priority to
-		ensure it runs immediately after the interrupt exits.  In this case a
-		priority of 3 is chosen. */
-		xTaskCreate( vHandlerTask, "Handler", 1000, NULL, 3, NULL );
-
-		/* Create the task that will periodically generate a software interrupt.
-		This is created with a priority below the handler task to ensure it will
-		get preempted each time the handler task exits the Blocked state. */
-		xTaskCreate( vPeriodicTask, "Periodic", 1000, NULL, 1, NULL );
-
-		/* Install the handler for the software interrupt.  The syntax necessary
-		to do this is dependent on the FreeRTOS port being used.  The syntax
-		shown here can only be used with the FreeRTOS Windows port, where such
-		interrupts are only simulated. */
-		//vPortSetInterruptHandler( mainINTERRUPT_NUMBER, ulExampleInterruptHandler );
-	}
   /* USER CODE BEGIN RTOS_THREADS */
+   for (uint32_t i = 0; i < 100; i++) {
+           buffer[i] = i + 1; // Filling the buffer with numbers from 1 to 100
+       }
+	       // Create the event group
+	       eventGroup = xEventGroupCreate();
+	       event=xEventGroupCreate();
+	       // Create the Mutex
+	       mutexHandle = xSemaphoreCreateMutex();
+	       // Create the Binary semaphore
+	       xBinarySemaphore=xSemaphoreCreateBinary();
+           xSemaphoreGive(xBinarySemaphore);
+	       // Create the Queue
+	      xQueue = xQueueCreate( 100, sizeof( uint16_t ) );
+//		   xTaskCreate(trafficLightTask, "Task-1", 1000, NULL, 1, NULL);
+//		   xTaskCreate(pedestrianSignalTask, "Task-2", 1000, NULL, 1, NULL);
+//		   xTaskCreate(pedestrianQueueManagementTask, "Task-3", 1000, ( void * )buffer, 1, NULL);
   /* add threads, ... */
   /* USER CODE END RTOS_THREADS */
 
   /* Start scheduler */
-  osKernelStart();
+		   if(xTaskCreate(trafficLightTask, "Task-1", 1000, NULL, 1, NULL)==pdPASS &&
+		      xTaskCreate(pedestrianSignalTask, "Task-2", 1000, NULL, 1, NULL)==pdPASS &&
+			  xTaskCreate(pedestrianQueueManagementTask, "Task-3", 1000, ( void * )buffer, 1, NULL)==pdPASS
+             )
+		   {
+			   vTaskStartScheduler();
+		   }
   /* We should never get here as control is now taken by the scheduler */
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
@@ -1101,133 +1085,111 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
     adcInterruptCheckFlag++;
 }
 #endif //#ifdef ADC_IT
-static void vHandlerTask( void *pvParameters )
-{
-	/* As per most tasks, this task is implemented within an infinite loop. */
-	for( ;; )
-	{
-		/* Use the semaphore to wait for the event.  The semaphore was created
-		before the scheduler was started so before this task ran for the first
-		time.  The task blocks indefinitely meaning this function call will only
-		return once the semaphore has been successfully obtained - so there is
-		no need to check the returned value. */
-		xSemaphoreTake( xCountingSemaphore, portMAX_DELAY );
-		/* To get here the event must have occurred.  Process the event (in this
-		case just print out a message). */
-		//vPrintString( "Handler task - Processing event.\r\n" );
-		HAL_UART_Transmit(&huart2, (uint8_t *) "Handler task - Processing event.\r\n" , sizeof( "Handler task - Processing event.\r\n" ), 1000);
 
-	}
+void trafficLightTask() { //else if condition to be used
+    while (1) {
+    	xEventGroupWaitBits(event, TASK1_BIT,pdTRUE,pdTRUE, portMAX_DELAY);
+        if (signalFlag == 0) {
+        	// Get the current tick count
+            HAL_UART_Transmit(&huart2, (uint8_t *)"Green signal activated\n\r", sizeof("Green signal activated\n\r"), 1000);
+            xEventGroupSetBits(eventGroup, DONT_WALK_FLAG); // Set the "don't walk" event flag
+            signalFlag++;
+            xEventGroupSetBits(event,TASK2_BIT);
+            vTaskDelay(pdMS_TO_TICKS(30000)); // Sleep for 30 seconds
+            HAL_UART_Transmit(&huart2, (uint8_t *)"Yellow signal activated\n\r", sizeof("Yellow signal activated\n\r"), 1000);
+			HAL_UART_Transmit(&huart2, (uint8_t *)"Don't Walk signal CONTINUED\n\r", sizeof("Don't Walk signal CONTINUED\n\r"), 1000);
+			HAL_UART_Transmit(&huart2, (uint8_t *)"Queue is filling!\r\n", sizeof("Queue is filling!\r\n"), 1000);
+			vTaskDelay(pdMS_TO_TICKS(3000));
+        }
+//        else if (signalFlag == 1) {
+//            HAL_UART_Transmit(&huart2, (uint8_t *)"Yellow signal activated\n\r", sizeof("Yellow signal activated\n\r"), 1000);
+//        	xEventGroupSetBits(eventGroup, DONT_WALK_FLAG); // Set the "don't walk" event flag
+//            signalFlag++;
+//            //xEventGroupSetBits(event,TASK2_BIT);
+//            vTaskDelay(pdMS_TO_TICKS(30000)); // Sleep for 3 seconds
+//        }
+        else {
+            HAL_UART_Transmit(&huart2, (uint8_t *)"Red signal activated\n\r", sizeof("Red signal activated\n\r"), 1000);
+            xEventGroupSetBits(eventGroup, WALK_FLAG); // Set the "walk" event flag
+            signalFlag = 0;
+            xEventGroupSetBits(event,TASK2_BIT);
+            vTaskDelay(pdMS_TO_TICKS(30000)); // Sleep for 30 seconds
+        }
+    }
 }
 
-static void vPeriodicTask( void *pvParameters )
+void pedestrianSignalTask()
 {
-const TickType_t xDelay500ms = pdMS_TO_TICKS( 500UL );
-
-	/* As per most tasks, this task is implemented within an infinite loop. */
-	for( ;; )
-	{
-		/* This task is just used to 'simulate' an interrupt.  This is done by
-		periodically generating a simulated software interrupt.  Block until it
-		is time to generate the software interrupt again. */
-		vTaskDelay( xDelay500ms );
-
-		/* Generate the interrupt, printing a message both before and after
-		the interrupt has been generated so the sequence of execution is evident
-		from the output.
-
-		The syntax used to generate a software interrupt is dependent on the
-		FreeRTOS port being used.  The syntax used below can only be used with
-		the FreeRTOS Windows port, in which such interrupts are only
-		simulated. */
-		//vPrintString( "Periodic task - About to generate an interrupt.\r\n" );
-		HAL_UART_Transmit(&huart2, (uint8_t *)"Periodic task - About to generate an interrupt.\r\n" , sizeof( "Periodic task - About to generate an interrupt.\r\n" ), 1000);
-	    //interruptFlag++;
-//	    if(interruptFlag==500)
-//	        {
-//	    		HAL_UART_Transmit(&huart2, (uint8_t *) "Handler task - Processing event.\r\n" , sizeof( "Handler task - Processing event.\r\n" ), 1000);
-//	    		interruptFlag=0;
-//	        }
-		//vPortGenerateSimulatedInterrupt( mainINTERRUPT_NUMBER );
-		//vPrintString( "Periodic task - Interrupt generated.\r\n\r\n\r\n" );
-		HAL_UART_Transmit(&huart2, (uint8_t *)"Periodic task - Interrupt generated.\r\n\r\n\r\n" , sizeof( "Periodic task - Interrupt generated.\r\n\r\n\r\n" ), 1000);
-
-	}
+	//xEventGroupSetBits(event,TASK1_BIT);
+    while(1){
+    		xEventGroupWaitBits(event, TASK2_BIT,pdTRUE,pdTRUE, portMAX_DELAY);
+			 EventBits_t flags = xEventGroupWaitBits(eventGroup, DONT_WALK_FLAG, pdTRUE, pdFALSE, 0);
+			 if(flags & DONT_WALK_FLAG)
+			 {
+				 HAL_UART_Transmit(&huart2, (uint8_t *)"Don't Walk signal activated\n\r", sizeof("Don't Walk signal activated\n\r"), 1000);
+				 xEventGroupSetBits(event,TASK3_BIT);
+			 }
+			 else
+			 {
+				 HAL_UART_Transmit(&huart2, (uint8_t *)"Walk signal activated\n\r", sizeof("Walk signal activated\n\r"), 1000);
+				 HAL_UART_Transmit(&huart2, (uint8_t *)"Pedestrian started crossing road i.e. pedestrian queue is getting empty\n\r", sizeof("Pedestrian started crossing road i.e. pedestrian queue is getting empty\n\r"), 1000);
+				 xEventGroupSetBits(event,TASK3_BIT);			 }
+    }
 }
 
-static uint32_t ulExampleInterruptHandler( void )
+void pedestrianQueueManagementTask(void *pvParameters)
 {
-BaseType_t xHigherPriorityTaskWoken;
 
-	/* The xHigherPriorityTaskWoken parameter must be initialized to pdFALSE as
-	it will get set to pdTRUE inside the interrupt safe API function if a
-	context switch is required. */
-	xHigherPriorityTaskWoken = pdFALSE;
+		xEventGroupSetBits(event,TASK1_BIT);
+		uint8_t lReceivedValue;
+			while(1)
+			{
+				xEventGroupWaitBits(event, TASK3_BIT,pdTRUE,pdTRUE, portMAX_DELAY);
+				EventBits_t flags = xEventGroupWaitBits(eventGroup, WALK_FLAG, pdTRUE, pdFALSE, 0);
+				if (flags & WALK_FLAG)
+				{
+					BaseType_t xStatus;
+					const TickType_t xTicksToWait = pdMS_TO_TICKS( 100 );
+					char buffer[250];
+					// Get the current tick count
+					TickType_t xStartTime = xTaskGetTickCount();
 
-	/* 'Give' the semaphore multiple times.  The first will unblock the deferred
-	interrupt handling task, the following 'gives' are to demonstrate that the
-	semaphore latches the events to allow the handler task to process them in
-	turn without events getting lost.  This simulates multiple interrupts being
-	processed by the processor, even though in this case the events are
-	simulated within a single interrupt occurrence.*/
-	xSemaphoreGiveFromISR( xCountingSemaphore, &xHigherPriorityTaskWoken );
-	xSemaphoreGiveFromISR( xCountingSemaphore, &xHigherPriorityTaskWoken );
-	xSemaphoreGiveFromISR( xCountingSemaphore, &xHigherPriorityTaskWoken );
+					// Calculate the tick count after 10 seconds (convert milliseconds to ticks)
+					TickType_t xEndTime = xStartTime + pdMS_TO_TICKS(10000);
 
-	/* Pass the xHigherPriorityTaskWoken value into portYIELD_FROM_ISR().  If
-	xHigherPriorityTaskWoken was set to pdTRUE inside xSemaphoreGiveFromISR()
-	then calling portYIELD_FROM_ISR() will request a context switch.  If
-	xHigherPriorityTaskWoken is still pdFALSE then calling
-	portYIELD_FROM_ISR() will have no effect.  The implementation of
-	portYIELD_FROM_ISR() used by the Windows port includes a return statement,
-	which is why this function does not explicitly return a value. */
-	portYIELD_FROM_ISR( xHigherPriorityTaskWoken );
+					while (xTaskGetTickCount() < xEndTime)
+					{
+					       xStatus = xQueueReceive(xQueue, &lReceivedValue, 0);
+					       if (xStatus == pdPASS) {
+					                    /* Data was successfully received from the queue, print out the received
+					                    value. */
+					                    sprintf(buffer, "%ld person is crossing a road \n\r", lReceivedValue);
+					                    HAL_UART_Transmit(&huart2, (uint8_t *)buffer, sizeof(buffer), 1000);
+					                }
+					       else {
+				                  //HAL_UART_Transmit(&huart2, (uint8_t *)"Could not receive from the queue.\r\n", sizeof("Could not receive from the queue.\r\n"), 1000);
+					                }
+					       // Generate random number and put the delay
+					 }
+					HAL_UART_Transmit(&huart2, (uint8_t *)"Don't Walk signal activated\n\r", sizeof("Don't Walk signal activated\n\r"), 1000);
+					xEventGroupSetBits(event,TASK1_BIT);
+				}
+				else
+				{
+					HAL_UART_Transmit(&huart2, (uint8_t *)"Queue is started filling!\r\n", sizeof("Queue is started filling!\r\n"), 1000);
+					        	            BaseType_t xStatus;
+					        	            for (uint32_t i = 0; i < 100; i++) {
+					        	                xStatus = xQueueSend(xQueue, &buffer[i], portMAX_DELAY);
+					        	                if (xStatus != pdPASS) {
+					        	                    HAL_UART_Transmit(&huart2, (uint8_t *)"Could not send to the queue.\r\n", sizeof("Could not send to the queue.\r\n"), 1000);
+					        	                }
+					        	            }
+					xEventGroupSetBits(event,TASK1_BIT);
+				}
+			}
 }
 
-void interruptPrint()
-{
-	HAL_UART_Transmit(&huart2, (uint8_t *) "Handler task - Processing event.\r\n" , sizeof( "Handler task - Processing event.\r\n" ), 1000);
-	HAL_UART_Transmit(&huart2, (uint8_t *) "Handler task - Processing event.\r\n" , sizeof( "Handler task - Processing event.\r\n" ), 1000);
-	HAL_UART_Transmit(&huart2, (uint8_t *) "Handler task - Processing event.\r\n" , sizeof( "Handler task - Processing event.\r\n" ), 1000);
-	interruptFlag=0;
-}
 /* USER CODE END 4 */
-
-/* USER CODE BEGIN Header_StartTask01 */
-/**
-  * @brief  Function implementing the Task01 thread.
-  * @param  argument: Not used
-  * @retval None
-  */
-/* USER CODE END Header_StartTask01 */
-void StartTask01(void const * argument)
-{
-  /* USER CODE BEGIN 5 */
-  /* Infinite loop */
-  for(;;)
-  {
-    osDelay(1);
-  }
-  /* USER CODE END 5 */
-}
-
-/* USER CODE BEGIN Header_StartTask02 */
-/**
-* @brief Function implementing the Task02 thread.
-* @param argument: Not used
-* @retval None
-*/
-/* USER CODE END Header_StartTask02 */
-void StartTask02(void const * argument)
-{
-  /* USER CODE BEGIN StartTask02 */
-  /* Infinite loop */
-  for(;;)
-  {
-    osDelay(1);
-  }
-  /* USER CODE END StartTask02 */
-}
 
 /**
   * @brief  Period elapsed callback in non blocking mode
@@ -1244,11 +1206,6 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
   /* USER CODE END Callback 0 */
   if (htim->Instance == TIM3) {
     HAL_IncTick();
-    interruptFlag++;
-    if(interruptFlag==500)
-    {
-    	interruptPrint();
-    }
   }
   /* USER CODE BEGIN Callback 1 */
 
